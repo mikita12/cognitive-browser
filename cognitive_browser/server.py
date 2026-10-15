@@ -19,9 +19,11 @@ from playwright.async_api import async_playwright, Browser, BrowserContext
 try:
     from .deberta_router import DebertaDecisionRouter
     from .agent_core import AgentCore, AriaElementParser
+    from .security import validate_url, SecurityError, mask_sensitive_value
 except ImportError:
     from deberta_router import DebertaDecisionRouter
     from agent_core import AgentCore, AriaElementParser
+    from security import validate_url, SecurityError, mask_sensitive_value
 
 # Environment configuration
 MODEL_NAME = os.getenv("MODEL_NAME", "cross-encoder/nli-deberta-v3-small")
@@ -151,13 +153,18 @@ async def evaluate_candidates(req: EvaluateRequest):
 @app.post("/v1/snapshot")
 async def take_aria_snapshot(req: SnapshotRequest):
     """Navigates to URL and returns clean semantic ARIA accessibility tree and candidates."""
+    try:
+        clean_url = validate_url(req.url)
+    except SecurityError as se:
+        raise HTTPException(status_code=400, detail=str(se))
+
     if not browser_instance:
         raise HTTPException(status_code=503, detail="Browser instance is not ready")
 
     t0 = time.perf_counter()
     page = await browser_instance.new_page()
     try:
-        await page.goto(req.url, wait_until="domcontentloaded", timeout=req.wait_time_ms + 10000)
+        await page.goto(clean_url, wait_until="domcontentloaded", timeout=req.wait_time_ms + 10000)
         await page.wait_for_timeout(req.wait_time_ms)
 
         # Auto-dismiss cookie overlays if present
@@ -185,6 +192,11 @@ async def execute_browse_task(req: BrowseTaskRequest):
     Multi-step browser execution using Reflex Core decision engine.
     Supports sequences of instructions or high-level goals.
     """
+    try:
+        clean_url = validate_url(req.url)
+    except SecurityError as se:
+        raise HTTPException(status_code=400, detail=str(se))
+
     if not browser_instance or not agent_instance:
         raise HTTPException(status_code=503, detail="Browser or agent engine is not ready")
 
@@ -193,8 +205,8 @@ async def execute_browse_task(req: BrowseTaskRequest):
     steps_log = []
 
     try:
-        print(f"\n[BrowseTask] Navigating to: {req.url}")
-        await page.goto(req.url, wait_until="domcontentloaded", timeout=req.timeout_ms)
+        print(f"\n[BrowseTask] Navigating to: {clean_url}")
+        await page.goto(clean_url, wait_until="domcontentloaded", timeout=req.timeout_ms)
         await page.wait_for_timeout(1000)
 
         # Step 0: Auto-dismiss cookies/consent modals
@@ -205,7 +217,8 @@ async def execute_browse_task(req: BrowseTaskRequest):
         # Execute defined steps
         if req.steps:
             for s in req.steps:
-                print(f"  -> Step: \"{s.instruction}\" (fill: {s.fill_value})")
+                masked_fill = mask_sensitive_value(s.fill_value, instruction=s.instruction)
+                print(f"  -> Step: \"{s.instruction}\" (fill: {masked_fill})")
                 res = await agent_instance.execute_step(
                     page=page,
                     instruction=s.instruction,

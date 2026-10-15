@@ -21,10 +21,12 @@ try:
     from .deberta_router import DebertaDecisionRouter
     from .agent_core import AgentCore, AriaElementParser
     from .agent_orchestrator import AgentOrchestrator
+    from .security import validate_url
 except ImportError:
     from deberta_router import DebertaDecisionRouter
     from agent_core import AgentCore, AriaElementParser
     from agent_orchestrator import AgentOrchestrator
+    from security import validate_url
 
 # Initialize MCP server
 mcp = MCPServer("cognitive-browser")
@@ -77,11 +79,12 @@ async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, A
         url: Target web page URL to open
         steps: List of steps, e.g. [{"instruction": "Departure station", "fill_value": "Central Station"}, {"instruction": "Search connections"}]
     """
+    validated_url = validate_url(url)
     router, agent, browser, orchestrator = await get_services()
     page = await browser.new_page()
 
     try:
-        res = await orchestrator.execute_task(page=page, url=url, steps=steps)
+        res = await orchestrator.execute_task(page=page, url=validated_url, steps=steps)
         final_snapshot = res.get("final_snapshot_summary", "")
 
         return {
@@ -118,11 +121,12 @@ async def get_aria_snapshot(url: str, max_candidates: int = 40) -> Dict[str, Any
         url: Target web page URL
         max_candidates: Maximum number of interactive candidates to return
     """
+    validated_url = validate_url(url)
     t_start = time.perf_counter()
     router, agent, browser, _ = await get_services()
     page = await browser.new_page()
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+        await page.goto(validated_url, wait_until="domcontentloaded", timeout=20000)
         await page.wait_for_timeout(1000)
         await agent.auto_dismiss_overlays(page)
 
@@ -159,11 +163,12 @@ async def smart_action(url: str, instruction: str, fill_value: Optional[str] = N
         instruction: Natural language action goal
         fill_value: Optional string value to type into an input field
     """
+    validated_url = validate_url(url)
     t_start = time.perf_counter()
     router, agent, browser, _ = await get_services()
     page = await browser.new_page()
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+        await page.goto(validated_url, wait_until="domcontentloaded", timeout=20000)
         await page.wait_for_timeout(1000)
         await agent.auto_dismiss_overlays(page)
 
