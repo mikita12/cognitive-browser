@@ -13,8 +13,12 @@ import re
 from typing import List, Dict, Any, Optional
 from playwright.async_api import Page, Browser, async_playwright
 
-from deberta_router import DebertaDecisionRouter
-from agent_core import AgentCore, AriaElementParser
+try:
+    from .deberta_router import DebertaDecisionRouter
+    from .agent_core import AgentCore, AriaElementParser
+except ImportError:
+    from deberta_router import DebertaDecisionRouter
+    from agent_core import AgentCore, AriaElementParser
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen2.5:1.5b"
@@ -25,7 +29,10 @@ class AgentOrchestrator:
         if router is not None:
             self.router = router
         else:
-            from router_factory import get_decision_router
+            try:
+                from .router_factory import get_decision_router
+            except ImportError:
+                from router_factory import get_decision_router
             self.router = get_decision_router(device=device)
         self.agent = AgentCore(device=device, router=self.router)
 

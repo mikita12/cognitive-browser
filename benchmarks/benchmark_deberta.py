@@ -7,10 +7,21 @@ Porównanie:
 """
 
 import asyncio
-import time
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../examples")))
+
 from playwright.async_api import async_playwright
-from extractor import DomCandidateExtractor
-from deberta_router import DebertaDecisionRouter
+try:
+    from extractor import DomCandidateExtractor
+except ImportError:
+    from examples.extractor import DomCandidateExtractor
+
+try:
+    from cognitive_browser import DebertaDecisionRouter
+except ImportError:
+    from deberta_router import DebertaDecisionRouter
 
 
 async def run_deberta_benchmark():

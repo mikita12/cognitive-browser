@@ -14,7 +14,10 @@ import torch
 from typing import List, Dict, Any
 
 from playwright.async_api import async_playwright
-from agent_orchestrator import AgentOrchestrator
+try:
+    from cognitive_browser import AgentOrchestrator
+except ImportError:
+    from agent_orchestrator import AgentOrchestrator
 
 TEST_CASES = [
     {
@@ -333,7 +336,7 @@ async def run_benchmark():
         await browser.close()
 
     # Zapis surowych danych JSON
-    output_path = "./benchmark_15_cases_results.json"
+    output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "benchmark_15_cases_results.json")
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
 

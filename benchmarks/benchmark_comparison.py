@@ -10,7 +10,10 @@ import time
 import json
 import subprocess
 from playwright.async_api import async_playwright
-from agent_core import AgentCore
+try:
+    from cognitive_browser import AgentCore
+except ImportError:
+    from agent_core import AgentCore
 
 
 def fetch_server_ornith_stats():

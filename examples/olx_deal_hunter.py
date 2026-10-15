@@ -10,7 +10,10 @@ import sys
 import time
 from typing import List, Dict, Any, Optional
 from playwright.async_api import async_playwright
-from agent_core import AgentCore
+try:
+    from cognitive_browser import AgentCore
+except ImportError:
+    from agent_core import AgentCore
 
 
 class OlxDealHunter:

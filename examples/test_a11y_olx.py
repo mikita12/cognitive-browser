@@ -6,7 +6,10 @@ Wykorzystuje oficjalne page.aria_snapshot() z Playwrighta.
 import asyncio
 import re
 from playwright.async_api import async_playwright
-from deberta_router import DebertaDecisionRouter
+try:
+    from cognitive_browser import DebertaDecisionRouter
+except ImportError:
+    from deberta_router import DebertaDecisionRouter
 
 
 def parse_aria_snapshot_lines(snapshot_text: str, max_items: int = 50):
