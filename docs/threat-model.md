@@ -33,14 +33,35 @@ This document provides a concise security analysis of Cognitive Browser, outlini
 
 ---
 
-## 4. Unhandled & Accepted Residual Risks
+## 4. Implemented Guardrails & Residual Risks
 
-The following risks cannot be fully prevented by application-level software guardrails alone and require operational awareness:
+### Implemented Protections
+- **Network Request & Redirect Guarding:** `setup_ssrf_route_guard()` intercepts all requests on `context.route("**/*")` (document navigations, subresources, XHR, fetch, and HTTP redirects with `max_redirects=0`), aborting any connection attempts to prohibited endpoints before dispatch.
+- **WebSocket Handshake Guarding:** Because standard `context.route` does not intercept WebSockets, `context.route_web_socket("**/*")` is attached to validate WebSocket connection URLs against loopback, private ranges, and metadata endpoints before establishing handshakes.
+- **Service Worker Blocking:** Browser contexts are initialized with `service_workers="block"` to prevent malicious pages from installing background service workers that might handle or manipulate network traffic outside the route guard.
+- **Strict Origin Exemption Parsing:** Exemption lists (`exempt_origins`) strictly compare parsed `(scheme, hostname, port)` tuples, preventing prefix and userinfo spoofing attacks (e.g. `http://127.0.0.1:PORT.evil.com/` or `http://127.0.0.1:PORT@evil.com/`).
 
-1. **DNS Rebinding:** Request-time route interception (`context.route("**/*")`) significantly reduces DNS rebinding risk: every request (including asynchronous XHR/fetch calls and dynamic subresources) is intercepted, re-resolved via `socket.getaddrinfo`, and aborted before dispatch if it resolves to a private, loopback, or metadata address.
-   - **What remains:** A microsecond Time-of-Check to Time-of-Use (TOCTOU) race condition remains if a malicious authoritative nameserver with `TTL=0` returns a public IP during Python's resolution check, but returns `127.0.0.1` during the subsequent internal socket handshake initiated by Chromium's independent network stack. Chromium may also reuse internal socket connection pools.
-   - **Recommended complete mitigation:** In multi-tenant cloud deployments, enforce egress firewall rules (e.g. iptables or cloud security groups blocking outbound traffic from browser workers to RFC 1918 and `169.254.169.254`) or use a local DNS resolver (e.g. dnsmasq with `stop-dns-rebind` or Unbound with `private-address`) that rejects private IPs in upstream public DNS responses.
-2. **Semantic Indirect Prompt Injection:** Untrusted webpage content is visible to the Cortex LLM escalation tier. While string sanitization removes control characters and delimiters, state-of-the-art LLMs can still be persuaded by sophisticated semantic prompt injection within page text. Untrusted sites should be automated in sandboxed environments without access to sensitive external tools.
-3. **Zero-Day Browser Exploits:** If the Chromium browser encounters a zero-day exploit on a malicious page, memory corruption or sandbox escape is handled by Chromium and OS sandboxing, not Python.
-4. **Adversarial NLI Misdirection:** Cleverly crafted adversarial text on a webpage could theoretically manipulate cross-encoder entailment scores to trigger an unintended click on an otherwise valid public site. Setting `REFLEX_CONFIDENCE_THRESHOLD` higher forces borderline matches to escalate to Cortex for secondary evaluation.
-5. **Third-Party CAPTCHA / Bot Challenges:** Cloudflare Turnstile or CAPTCHAs deliberately block automated browsers. Cognitive Browser will escalate or stop rather than attempting bypasses.
+### Known Residual Risks & Limitations
+
+The following risks cannot be fully prevented by application-level Python guardrails alone and require operational awareness:
+
+1. **DNS Rebinding & IP Pinning Constraints:**
+   - **Mechanism:** Request-time route interception verifies resolved IP addresses via `socket.getaddrinfo` before connection dispatch. However, `route.fetch()` in the Playwright driver delegates connection establishment to the Node.js/Chromium network stack.
+   - **Why IP Pinning is Not Feasible at Application Layer:** We investigated pinning the connection directly to the pre-validated IP address (e.g., rewriting `https://example.com` to `https://93.184.216.34` with a `Host` header). In HTTPS connections, replacing the hostname with an IP address breaks TLS Server Name Indication (SNI) and Subject Alternative Name (SAN) validation, triggering fatal `ERR_CERT_COMMON_NAME_INVALID` errors unless certificate verification is disabled.
+   - **Residual TOCTOU Risk:** If an attacker controls an authoritative nameserver that serves a public IP with `TTL=0` during Python's `socket.getaddrinfo` check, and immediately returns `127.0.0.1` when Playwright's network layer initiates the socket, a Time-of-Check to Time-of-Use race condition exists.
+   - **Required Operational Mitigation:** In multi-tenant cloud deployments, enforce network-level egress filtering (e.g. `iptables`, `nftables`, or cloud security group egress rules blocking outbound traffic to RFC 1918, link-local `169.254.0.0/16`, and loopback) or deploy a dedicated forward proxy / recursive DNS resolver with DNS rebinding protection (e.g. Unbound with `private-address` or dnsmasq with `stop-dns-rebind`).
+
+2. **In-Memory Response Buffering:**
+   - Playwright's `route.fetch()` buffers incoming response bodies into memory before passing them to `route.fulfill()`. Extremely large payloads or infinite streaming responses from adversarial servers can consume significant memory. Production deployments should enforce request timeouts and container memory limits (`cgroups` / Docker `--memory`).
+
+3. **Semantic Indirect Prompt Injection:**
+   - Candidate labels and page texts are passed to the Cortex LLM escalation tier. While control characters and delimiters are stripped via `sanitize_untrusted_text()`, and system prompts instruct the LLM to treat candidate text as inert data, state-of-the-art LLMs may still be influenced by sophisticated semantic prompt injection embedded in page text. Untrusted sites should be automated in sandboxed environments without access to sensitive external tools.
+
+4. **Zero-Day Browser Exploits:**
+   - If Chromium encounters an unpatched engine exploit on a malicious page, memory safety and sandbox escapes are handled by Chromium's multi-process architecture and OS sandboxing, not Python.
+
+5. **Adversarial NLI Misdirection:**
+   - Crafted text on a webpage could theoretically influence entailment scores to trigger an unintended click on an otherwise valid public site. Setting `REFLEX_CONFIDENCE_THRESHOLD` higher forces borderline matches to escalate to Cortex for secondary evaluation.
+
+6. **Third-Party CAPTCHA / Bot Challenges:**
+   - Cloudflare Turnstile or CAPTCHAs deliberately block automated browsers. Cognitive Browser will escalate or stop rather than attempting bypasses.
