@@ -1,5 +1,5 @@
 """
-AgentCore - Universal Autonomous Browser Agent (ARIA + DeBERTa System 1).
+AgentCore - Universal Autonomous Browser Agent (ARIA + Reflex Core).
 Navigates web applications using official Accessibility Trees (ARIA snapshots)
 and DeBERTa-v3 discriminative decision routing in sub-50ms with 0 LLM tokens.
 """
@@ -85,7 +85,7 @@ class AriaElementParser:
 
 class AgentCore:
     """
-    Core cognitive browser agent engine (System 1 + Playwright).
+    Core cognitive browser agent engine (Reflex Core + Playwright).
     Eliminates fragile CSS selectors by leveraging native ARIA locators.
     """
 
@@ -192,7 +192,7 @@ class AgentCore:
         }
 
         if decision["should_escalate"] or decision["target_ref"] == "NONE":
-            step_info["error"] = "Low confidence element match (escalation to System 2 required)"
+            step_info["error"] = "Low confidence element match (escalation to Cortex required)"
             self.execution_log.append(step_info)
             return step_info
 

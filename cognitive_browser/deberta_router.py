@@ -1,5 +1,5 @@
 """
-DeBERTa Decision Router (Discriminative System 1 Model).
+DeBERTa Decision Router (Reflex Core Model).
 Utilizes Natural Language Inference (NLI) with DeBERTa-v3 on GPU/MPS/CPU.
 Zero generative LLM tokens consumed. Sub-50ms inference on modern hardware.
 """

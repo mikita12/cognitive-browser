@@ -1,5 +1,5 @@
 """
-Cognitive Browser: Autonomous Web Agent with System 1 (DeBERTa NLI) and System 2 Escalation.
+Cognitive Browser: Autonomous Web Agent with Reflex Core (DeBERTa NLI) and Cortex Engine Escalation.
 """
 
 from .deberta_router import DebertaDecisionRouter

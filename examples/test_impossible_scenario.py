@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Architecture Stress-Test: Handling an Impossible Task Scenario.
-Tests resilience of System 1 (DeBERTa) and System 2 against:
+Tests resilience of Reflex Core (DeBERTa) and Cortex Engine against:
 1. Complete absence of any matching element in ARIA snapshot.
 2. Protection against hallucinated or random click behavior.
-3. Clean escalation to System 2 and objective identification of impossibility.
+3. Clean escalation to Cortex and objective identification of impossibility.
 4. Protection against infinite loops (graceful termination).
 """
 
@@ -47,7 +47,7 @@ async def run_impossible_stress_test():
         candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=50)
         print(f"  -> Retrieved {len(candidates)} interactive elements in {(time.perf_counter()-t0)*1000:.1f} ms.")
 
-        print("\n[Step 2] Evaluation by System 1 (DeBERTa-v3 on GPU)...")
+        print("\n[Step 2] Evaluation by Reflex Core (DeBERTa-v3 on GPU)...")
         t_eval = time.perf_counter()
         decision = router.evaluate_candidates(
             intent=impossible_instruction,
@@ -65,17 +65,17 @@ async def run_impossible_stress_test():
         for idx, cand in enumerate(decision["ranked_candidates"][:3]):
             print(f"    {idx+1}. [{cand['role']}] \"{cand['name']}\" -> Confidence: {cand.get('confidence_score', 0):.2%}")
 
-        # VERIFY SYSTEM 1
+        # VERIFY REFLEX CORE
         if decision["should_escalate"] or decision["target_ref"] == "NONE":
-            print("\n✅ [SYSTEM 1 SUCCESS]: DeBERTa correctly REFUSED to execute blind click!")
+            print("\n✅ [REFLEX CORE SUCCESS]: DeBERTa correctly REFUSED to execute blind click!")
             print(f"   Confidence ({decision['confidence']:.1%}) < 50% threshold. Zero hallucination.")
         else:
-            print("\n❌ [SYSTEM 1 FAILURE]: Model erroneously selected an element despite impossible task!")
+            print("\n❌ [REFLEX CORE FAILURE]: Model erroneously selected an element despite impossible task!")
             await browser.close()
             return
 
-        # STEP 3: ESCALATION TO SYSTEM 2 (Higher-order reasoning simulation)
-        print("\n[Step 3] Escalating to System 2...")
+        # STEP 3: ESCALATION TO CORTEX (Higher-order reasoning simulation)
+        print("\n[Step 3] Escalating to Cortex Engine...")
         t_s2 = time.perf_counter()
 
         keywords_required = ["buy", "vip", "premium", "checkout", "payment", "subscription", "cart", "price"]
@@ -84,7 +84,7 @@ async def run_impossible_stress_test():
 
         s2_time_ms = (time.perf_counter() - t_s2) * 1000
 
-        print(f"  ⏱ System 2 analysis latency: {s2_time_ms:.2f} ms")
+        print(f"  ⏱ Cortex analysis latency: {s2_time_ms:.2f} ms")
         print(f"  🔎 Task keywords detected on page: {matches if matches else 'NONE (0/8)'}")
 
         if not matches:
@@ -110,7 +110,7 @@ async def run_impossible_stress_test():
             print("\n🏆 SYSTEM PASSED 100% OF VERIFICATION CHECKS:")
             print("1. DeBERTa did not click any random button (confidence rejected).")
             print("2. Loop did not get stuck in infinite retries.")
-            print("3. System 2 identified that the task is objectively impossible and aborted gracefully.")
+            print("3. Cortex identified that the task is objectively impossible and aborted gracefully.")
 
         await browser.close()
 

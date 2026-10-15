@@ -1,5 +1,5 @@
 """
-Wikipedia Semantic Speedrunner (System 1 on GPU).
+Wikipedia Semantic Speedrunner (Reflex Core on GPU).
 Challenge: Traverse from 'Most Grunwaldzki' article to 'Clang' (C/C++ compiler)
 By evaluating dozens of links live on GPU in tens of milliseconds!
 """

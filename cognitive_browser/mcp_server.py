@@ -2,7 +2,7 @@
 """
 Cognitive Browser MCP Server (Model Context Protocol).
 Official MCP standard integration for AI agents (Claude Desktop, Cursor, Antigravity, Open WebUI).
-Exposes System 1 (DeBERTa-v3 on GPU) and Playwright ARIA Snapshots as native tools for language models.
+Exposes Reflex Core (DeBERTa-v3 on GPU) and Playwright ARIA Snapshots as native tools for language models.
 Includes precision execution telemetry (GPU vs Network) with mandatory user reporting.
 """
 
@@ -66,12 +66,12 @@ async def get_services():
 @mcp.tool()
 async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Autonomously executes multi-step web navigation using local System 1 (DeBERTa-v3 on GPU)
-    and active System 2 assistance (LLM Escalation Recovery) when encountering ambiguities or modals.
+    Autonomously executes multi-step web navigation using local Reflex Core (DeBERTa-v3 on GPU)
+    and active Cortex Engine assistance (LLM Escalation Recovery) when encountering ambiguities or modals.
     Makes split-second decisions, auto-dismisses cookie banners, and leads tasks to 100% completion.
 
     IMPORTANT FOR AGENT: After executing THIS TOOL, ALWAYS present the user with the 'telemetry' block
-    (total duration in seconds, GPU inference time, System 2 tokens, and estimated tokens saved).
+    (total duration in seconds, GPU inference time, Cortex tokens, and estimated tokens saved).
 
     Args:
         url: Target web page URL to open
@@ -88,10 +88,13 @@ async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, A
             "status": "success" if res.get("status") == "completed" else "partial",
             "final_url": res.get("final_url"),
             "final_title": res.get("final_title"),
+            "escalations_resolved_by_cortex": res.get("escalations_count", 0),
             "escalations_resolved_by_system2": res.get("escalations_count", 0),
             "telemetry": {
                 "total_execution_seconds": res.get("total_execution_seconds", 0.0),
                 "total_execution_ms": round(res.get("total_execution_seconds", 0.0) * 1000, 1),
+                "reflex_gpu_inference_ms": res.get("reflex_gpu_ms", res.get("system1_gpu_ms", 0.0)),
+                "cortex_llm_tokens": res.get("cortex_tokens", res.get("system2_tokens", 0)),
                 "system1_gpu_inference_ms": res.get("system1_gpu_ms", 0.0),
                 "system2_llm_tokens": res.get("system2_tokens", 0),
                 "steps_completed": res.get("steps_executed", 0)
@@ -172,6 +175,8 @@ async def smart_action(url: str, instruction: str, fill_value: Optional[str] = N
             "telemetry": {
                 "total_execution_seconds": round(t_total, 2),
                 "total_execution_ms": round(t_total * 1000, 1),
+                "reflex_gpu_inference_ms": res.get("latency_ms", 0.0),
+                "tokens_used_by_reflex": 0,
                 "system1_gpu_inference_ms": res.get("latency_ms", 0.0),
                 "tokens_used_by_system1": 0
             },

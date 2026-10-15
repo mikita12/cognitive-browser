@@ -14,7 +14,9 @@
       "system2_tokens": 0,
       "total_tokens": 212,
       "steps_executed": 3,
-      "final_url": "https://koleo.pl/rozklad-pkp/wroclaw-glowny/poznan-glowny/15-10-2026_03:45"
+      "final_url": "https://koleo.pl/rozklad-pkp/wroclaw-glowny/poznan-glowny/15-10-2026_03:45",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 219.31
     },
     "base_playwright": {
       "success": true,
@@ -41,7 +43,9 @@
       "system2_tokens": 0,
       "total_tokens": 171,
       "steps_executed": 2,
-      "final_url": "https://inpost.pl/cenniki#individual-customer?manager-paczek-paczkomat"
+      "final_url": "https://inpost.pl/cenniki#individual-customer?manager-paczek-paczkomat",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 105.63
     },
     "base_playwright": {
       "success": true,
@@ -68,7 +72,9 @@
       "system2_tokens": 0,
       "total_tokens": 167,
       "steps_executed": 2,
-      "final_url": "http://books.toscrape.com/catalogue/category/books/food-and-drink_33/index.html"
+      "final_url": "http://books.toscrape.com/catalogue/category/books/food-and-drink_33/index.html",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 39.49
     },
     "base_playwright": {
       "success": true,
@@ -95,7 +101,9 @@
       "system2_tokens": 0,
       "total_tokens": 218,
       "steps_executed": 5,
-      "final_url": "https://httpbin.org/forms/post"
+      "final_url": "https://httpbin.org/forms/post",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 33.28
     },
     "base_playwright": {
       "success": true,
@@ -122,7 +130,9 @@
       "system2_tokens": 0,
       "total_tokens": 180,
       "steps_executed": 2,
-      "final_url": "https://www.olx.pl/oferty/"
+      "final_url": "https://www.olx.pl/oferty/",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 57.55
     },
     "base_playwright": {
       "success": true,
@@ -149,7 +159,9 @@
       "system2_tokens": 254,
       "total_tokens": 419,
       "steps_executed": 2,
-      "final_url": "https://news.ycombinator.com/forgot"
+      "final_url": "https://news.ycombinator.com/forgot",
+      "cortex_tokens": 254,
+      "reflex_gpu_ms": 36.19
     },
     "base_playwright": {
       "success": true,
@@ -176,7 +188,9 @@
       "system2_tokens": 0,
       "total_tokens": 169,
       "steps_executed": 2,
-      "final_url": "https://github.com/trending"
+      "final_url": "https://github.com/trending",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 48.26
     },
     "base_playwright": {
       "success": true,
@@ -203,7 +217,9 @@
       "system2_tokens": 0,
       "total_tokens": 182,
       "steps_executed": 2,
-      "final_url": "https://www.morele.net/wyszukiwarka/?q=Klawiatura+mechaniczna&d=0"
+      "final_url": "https://www.morele.net/wyszukiwarka/?q=Klawiatura+mechaniczna&d=0",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 30.94
     },
     "base_playwright": {
       "success": true,
@@ -230,7 +246,9 @@
       "system2_tokens": 0,
       "total_tokens": 164,
       "steps_executed": 2,
-      "final_url": "http://quotes.toscrape.com/tag/humor/page/2/"
+      "final_url": "http://quotes.toscrape.com/tag/humor/page/2/",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 45.4
     },
     "base_playwright": {
       "success": true,
@@ -257,7 +275,9 @@
       "system2_tokens": 0,
       "total_tokens": 171,
       "steps_executed": 2,
-      "final_url": "https://expresspizza.pl/pizzeria-zielona-gora"
+      "final_url": "https://expresspizza.pl/pizzeria-zielona-gora",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 65.42
     },
     "base_playwright": {
       "success": true,
@@ -284,7 +304,9 @@
       "system2_tokens": 0,
       "total_tokens": 168,
       "steps_executed": 2,
-      "final_url": "https://mania.pizza/polityka-plikow-cookies-eu/"
+      "final_url": "https://mania.pizza/polityka-plikow-cookies-eu/",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 39.49
     },
     "base_playwright": {
       "success": true,
@@ -311,7 +333,9 @@
       "system2_tokens": 0,
       "total_tokens": 164,
       "steps_executed": 2,
-      "final_url": "https://www.pizzu.pl/#menu-lunch"
+      "final_url": "https://www.pizzu.pl/#menu-lunch",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 117.81
     },
     "base_playwright": {
       "success": true,
@@ -338,7 +362,9 @@
       "system2_tokens": 0,
       "total_tokens": 199,
       "steps_executed": 3,
-      "final_url": "https://www.e-podroznik.pl/zamowienia"
+      "final_url": "https://www.e-podroznik.pl/zamowienia",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 63.98
     },
     "base_playwright": {
       "success": true,
@@ -365,7 +391,9 @@
       "system2_tokens": 0,
       "total_tokens": 179,
       "steps_executed": 2,
-      "final_url": "https://www.gov.pl/"
+      "final_url": "https://www.gov.pl/",
+      "cortex_tokens": 0,
+      "reflex_gpu_ms": 64.43
     },
     "base_playwright": {
       "success": true,
@@ -392,7 +420,9 @@
       "system2_tokens": 1293,
       "total_tokens": 1459,
       "steps_executed": 1,
-      "final_url": "https://www.wroclaw.pl/komunikacja/rozklady-jazdy"
+      "final_url": "https://www.wroclaw.pl/komunikacja/rozklady-jazdy",
+      "cortex_tokens": 1293,
+      "reflex_gpu_ms": 29.72
     },
     "base_playwright": {
       "success": true,

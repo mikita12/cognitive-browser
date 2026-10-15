@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cognitive-browser"
 version = "0.1.0"
-description = "Universal Autonomous Browser Agent with System 1 (DeBERTa-v3 NLI) Decision Routing & Playwright ARIA"
+description = "Universal Autonomous Browser Agent with Reflex Core (DeBERTa-v3 NLI) Decision Routing & Cortex Escalation"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

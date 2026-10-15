@@ -6,8 +6,8 @@
 [![Token Reduction](https://img.shields.io/badge/Tokens-98.9%25%20Saved-brightgreen.svg)]()
 [![Execution Speedup](https://img.shields.io/badge/Speedup-3.9x%20Faster-orange.svg)]()
 
-> **Cognitive Browser** is a dual-system (System 1 + System 2) autonomous web browser agent and official **Model Context Protocol (MCP)** server.
-> It replaces slow, token-devouring Playwright MCP servers by executing multi-step web navigation through **local reflex models (DeBERTa-v3 NLI)** in ~40 ms with **0 LLM tokens**, while reserving full LLM reasoning (System 2) only when escalations or ambiguous dialogues occur.
+> **Cognitive Browser** is a dual-system (Reflex Core + Cortex Engine) autonomous web browser agent and official **Model Context Protocol (MCP)** server.
+> It replaces slow, token-devouring Playwright MCP servers by executing multi-step web navigation through **local reflex models (DeBERTa-v3 NLI)** in ~40 ms with **0 LLM tokens**, while reserving full LLM reasoning (Cortex Engine) only when escalations or ambiguous dialogues occur.
 
 ---
 
@@ -19,7 +19,7 @@ Tested on 15 live web applications across transportation, e-commerce, forms, mar
 |---|:---:|:---:|:---:|
 | **Token Consumption** | 382,980 tokens | **4,222 tokens** | **-98.9% LESS TOKENS** |
 | **Average Task Latency** | 19.73 s | **5.12 s** | **3.9x FASTER** |
-| **System 1 Decision Speed** | N/A (Full LLM call ~3.2 s) | **~30–60 ms (GPU/MPS)** | **~70x Faster Decision** |
+| **Reflex Core Decision Speed** | N/A (Full LLM call ~3.2 s) | **~30–60 ms (GPU/MPS)** | **~70x Faster Decision** |
 | **Task Completion Rate** | 15 / 15 (100%) | **15 / 15 (100%)** | **100% Parity** |
 
 *(Full benchmark telemetry available in [`benchmarks/benchmark_15_cases_results.json`](benchmarks/benchmark_15_cases_results.json))*.
@@ -35,18 +35,18 @@ flowchart TD
     User["Agent / User Intent"] --> Nav["Browser Navigation & Auto-Dismiss Consent"]
     Nav --> Snapshot["Condensed ARIA Accessibility Tree (~98% smaller than HTML)"]
     
-    Snapshot --> S1["⚡ System 1: DeBERTa-v3 Cross-Encoder NLI (Local GPU / Apple MPS / CPU)"]
+    Snapshot --> S1["⚡ Reflex Core: DeBERTa-v3 Cross-Encoder NLI (Local GPU / Apple MPS / CPU)"]
     
     S1 -- "High Confidence (> 0.50)" --> Exec["Direct Playwright Action (fill / click) in ~40 ms\n[0 LLM TOKENS CONSUMED]"]
     
-    S1 -- "Ambiguity / Modal / Conflict (< 0.50)" --> S2["🧠 System 2: LLM Escalation (Ollama / Cloud LLM)"]
-    S2 -->|"Resolves element & assists DeBERTa"| Exec
+    S1 -- "Ambiguity / Modal / Conflict (< 0.50)" --> S2["🧠 Cortex Engine: LLM Escalation (Ollama / Cloud LLM)"]
+    S2 -->|"Resolves element & assists Reflex"| Exec
     
     Exec -->|"Verify next step"| Next["Next Step / 100% Task Completion"]
 ```
 
-1. **System 1 (Reflex Engine)**: `cross-encoder/nli-deberta-v3-small` (140M params) evaluates candidates using Zero-Shot Natural Language Inference (`premise` = interactive element, `hypothesis` = user intent).
-2. **System 2 (Reasoning Engine)**: When low confidence or an unexpected modal dialog occurs, System 2 steps in with compact context (~400 tokens) to unblock the agent.
+1. **Reflex Core**: `cross-encoder/nli-deberta-v3-small` (140M params) evaluates candidates using Zero-Shot Natural Language Inference (`premise` = interactive element, `hypothesis` = user intent).
+2. **Cortex Engine**: When low confidence or an unexpected modal dialog occurs, Cortex Engine steps in with compact context (~400 tokens) to unblock the agent.
 3. **Rock-Solid DOM Locators**:
    - Universal cookie / GDPR auto-dismissal (OneTrust, Didomi, Klaro).
    - Unicode font-icon normalization (`\ue000-\uf8ff` stripping).
@@ -118,8 +118,8 @@ Cognitive Browser adapts to your hardware via [`cognitive_browser.router_factory
        "final_url": "https://koleo.pl/...",
        "telemetry": {
          "total_execution_seconds": 5.09,
-         "system1_gpu_inference_ms": 219.3,
-         "system2_llm_tokens": 0,
+         "reflex_gpu_inference_ms": 219.3,
+         "cortex_llm_tokens": 0,
          "steps_completed": 3
        }
      }
@@ -147,7 +147,7 @@ cognitive-browser/
 ├── cognitive_browser/         # Core Python package
 │   ├── __init__.py            # Clean exports (AgentCore, DeBERTa, Orchestrator)
 │   ├── agent_core.py          # ARIA parser, DOM actions, cookie auto-dismissal
-│   ├── agent_orchestrator.py  # Dual-tier System 1 + System 2 active escalation loop
+│   ├── agent_orchestrator.py  # Dual-tier Reflex Core + Cortex Engine active escalation loop
 │   ├── deberta_router.py      # Local DeBERTa-v3 NLI cross-encoder (CUDA/MPS/CPU)
 │   ├── api_router.py          # Cloud cross-encoders (Hugging Face / Cohere / LLM)
 │   ├── router_factory.py      # Dynamic hardware/API selection engine

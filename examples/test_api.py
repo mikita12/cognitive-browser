@@ -19,7 +19,7 @@ def test_health():
 
 
 def test_evaluate():
-    print("\n⚡ 2. Testing System 1 inference (/v1/evaluate)...")
+    print("\n⚡ 2. Testing Reflex Core inference (/v1/evaluate)...")
     payload = {
         "intent": "accept all cookies and terms to close the consent banner",
         "candidates": [

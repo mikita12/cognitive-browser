@@ -1,6 +1,6 @@
 """
 Comparative Benchmark:
-Universal Browser Agent (ARIA + DeBERTa System 1 on RTX 4070 Ti)
+Universal Browser Agent (ARIA + DeBERTa Reflex Core on RTX 4070 Ti)
 vs
 Cloud/Server Baseline (app + Ornith-1.5:35B LLM)
 """

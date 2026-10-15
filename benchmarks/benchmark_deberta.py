@@ -57,7 +57,7 @@ async def run_deberta_benchmark():
         print(f"  -> Interactive elements found: {len(candidates)} (extraction time: {extract_ms:.2f} ms)")
         print(f"  -> Data size reduction: {((raw_html_len - (len(candidates) * 50)) / raw_html_len) * 100:.1f}%")
 
-        # 2. DeBERTa inference (System 1)
+        # 2. DeBERTa inference (Reflex Core)
         print(f"\n[3/4] Discriminative inference (DeBERTa-v3 NLI on GPU):")
         decision = router.evaluate_candidates(intent=intent, candidates=candidates)
 

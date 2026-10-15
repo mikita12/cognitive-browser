@@ -1,5 +1,5 @@
 """
-Parallel Decision Worker Pool (System 1 Ensemble / Parallel Evaluator).
+Parallel Decision Worker Pool (Reflex Core Ensemble / Parallel Evaluator).
 Executes multiple concurrent decision queries across local fast models.
 """
 
@@ -32,7 +32,7 @@ class DecisionWorker:
         start_time = time.perf_counter()
 
         system_prompt = (
-            "You are a low-latency Web Navigation Decision Router (System 1).\n"
+            "You are a low-latency Web Navigation Decision Router (Reflex Core).\n"
             "Your task is to analyze the user's intent and select the single best interactive element ref to interact with.\n"
             "If no element fits or there is high ambiguity, set should_escalate to true."
         )
