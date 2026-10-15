@@ -17,10 +17,10 @@ By resolving routine element interactions through Natural Language Inference (NL
 
 | Metric | Simulated Baseline ReAct Agent | Cognitive Browser (Reflex + Cortex) | Measured Difference |
 |---|:---:|:---:|:---:|
-| **Interaction Token Consumption** | ~382,980 tokens | 4,222 tokens | Significant token reduction on routine steps |
-| **Average Task Duration** | ~19.73 s (simulated network) | 5.12 s (local GPU) | Reduced step latency via local routing |
-| **Reflex Core Decision Latency** | N/A (Cloud LLM call ~2–4 s) | ~25–120 ms (CUDA) / ~200–450 ms (CPU) | Sub-second local decision loop |
-| **Task Completion on Test Set** | 15 / 15 | 15 / 15 | Parity on predefined step benchmark |
+| **Interaction Token Consumption** | ~372,073 tokens | 4,300 tokens | 98.8% token reduction on routine steps |
+| **Average Task Duration** | ~18.12 s (simulated network) | 5.37 s (local CUDA GPU) | ~3.4x faster step execution via local routing |
+| **Reflex Core Decision Latency** | N/A (Cloud LLM call ~2–4 s) | ~6–95 ms/step (~63.1 ms/task on CUDA) | Sub-second local discriminative decision loop |
+| **Task Completion on Test Set** | 15 / 15 | 15 / 15 | 100% completion across all 15 live workflows |
 
 *(Benchmark run data available in [`benchmarks/benchmark_15_cases_results.json`](benchmarks/benchmark_15_cases_results.json))*.
 

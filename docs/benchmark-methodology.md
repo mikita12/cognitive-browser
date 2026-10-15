@@ -34,21 +34,21 @@ The benchmark evaluates the performance of **Cognitive Browser** (Reflex Core De
 
 The benchmark includes 15 realistic multi-step web workflows across e-commerce, travel, civic portals, search, and job boards:
 
-1. **Koleo (`koleo.pl`)**: Train ticket search (Warszawa Centralna -> Kraków Główny).
-2. **OLX (`olx.pl`)**: Real estate rental search in Wrocław.
-3. **Otomoto (`otomoto.pl`)**: Vehicle search (Toyota Yaris).
-4. **Wikipedia (`wikipedia.org`)**: Search for "Artificial intelligence" article.
-5. **Allegro (`allegro.pl`)**: Consumer electronics search for laptops.
-6. **Pracuj.pl (`pracuj.pl`)**: Job search for Python Developer in Warszawa.
-7. **GitHub (`github.com`)**: Repository search for "playwright".
-8. **Hacker News (`news.ycombinator.com`)**: Algolia search for "deberta".
-9. **Gov.pl (`gov.pl`)**: Public administration search for ID card renewal.
-10. **Castorama (`castorama.pl`)**: Hardware search for rotary hammer drill.
-11. **Empik (`empik.com`)**: Book search for "Wiedźmin".
-12. **Ceneo (`ceneo.pl`)**: Price aggregator search for "PlayStation 5".
-13. **Booking.com (`booking.com`)**: Accommodation search in Gdańsk.
-14. **DuckDuckGo (`duckduckgo.com`)**: Search for "local NLI agent".
-15. **Medonet (`medonet.pl`)**: Medical information search for "grypa objawy".
+1. **Koleo (`koleo.pl`)**: Train ticket search (Wrocław Główny -> Poznań Główny).
+2. **InPost (`inpost.pl`)**: Navigation to parcel locker pricing tab.
+3. **Books to Scrape (`books.toscrape.com`)**: Category selection and product interaction.
+4. **HTTPBin (`httpbin.org/forms/post`)**: Multi-field HTML5 form completion (name, phone, email, radio, checkbox).
+5. **OLX (`olx.pl`)**: Search for electronics offers ("PlayStation 5") with consent modal handling.
+6. **Hacker News (`news.ycombinator.com`)**: Navigation to Show HN and discussion comments.
+7. **GitHub Trending (`github.com/trending`)**: Navigation to developer and spoken language filters.
+8. **Morele.net (`morele.net`)**: Search for computer peripherals with consent banner handling.
+9. **Quotes to Scrape (`quotes.toscrape.com`)**: Tag filtering and pagination navigation.
+10. **Express Pizza (`expresspizza.pl`)**: Online food ordering delivery location selection.
+11. **Mania Smaku (`mania.pizza`)**: Online pizza menu exploration.
+12. **Pizzu Wrocław (`pizzu.pl`)**: Lunch menu specials navigation.
+13. **E-Podróżnik (`e-podroznik.pl`)**: Intercity transit route search (Wrocław -> Kraków).
+14. **Gov.pl (`gov.pl`)**: Public administration search for ID card renewal procedure.
+15. **MPK Wrocław (`wroclaw.pl/komunikacja/rozklady-jazdy`)**: Urban tram timetable verification.
 
 ---
 
