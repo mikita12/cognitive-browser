@@ -1,6 +1,7 @@
 # Cognitive Browser MCP
 
 [![CI](https://github.com/mikita12/cognitive-browser/actions/workflows/ci.yml/badge.svg)](https://github.com/mikita12/cognitive-browser/actions/workflows/ci.yml)
+[![Coverage Status](https://img.shields.io/badge/coverage-pytest--cov-green.svg)](https://github.com/mikita12/cognitive-browser/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
@@ -22,7 +23,10 @@ By resolving routine element interactions through Natural Language Inference (NL
 | **Average Task Duration** | **5.37 s** | Total wall-clock time per task (browser navigation, overlays, and actions) |
 | **Total Interaction Tokens (15 tasks)** | **4,300 tokens** | Combined across all 15 tasks (13 tasks used 0 LLM tokens; 2 required Cortex escalation) |
 
-*(Raw benchmark data: [`benchmarks/benchmark_15_cases_results.json`](benchmarks/benchmark_15_cases_results.json) | Summary script: [`benchmarks/summarize_results.py`](benchmarks/summarize_results.py))*.
+### Results & Calibration Data
+- **15-Case Benchmark Details:** Empirical run logs and hardware setup in [docs/benchmark-methodology.md](docs/benchmark-methodology.md) (raw results: [`benchmarks/benchmark_15_cases_results.json`](benchmarks/benchmark_15_cases_results.json) | summary script: [`benchmarks/summarize_results.py`](benchmarks/summarize_results.py)).
+- **Reflex Threshold Sweep:** Calibration metrics (precision, recall, escalation rates across thresholds 0.30–0.90) in [docs/threshold-analysis.md](docs/threshold-analysis.md) (raw sweep data: [`benchmarks/threshold_sweep_results.json`](benchmarks/threshold_sweep_results.json)).
+- **Demo Recording Guide:** Instructions for recording terminal demo GIFs in [docs/demo.md](docs/demo.md).
 
 ---
 
@@ -132,20 +136,22 @@ The router selection is configured via environment variables or explicit paramet
 
 ## Comparison with Related Projects
 
-| Project | Approach | Best For | Trade-offs |
+| Project | Core Approach | Target Use Case | Required from User / Environment |
 |---|---|---|---|
-| **Cognitive Browser** | Dual-tier (local NLI cross-encoder + selective LLM escalation) | Cost-sensitive workflows, high-throughput form filling, structured MCP tools | Requires structured steps; no native vision model |
-| **browser-use** | Full cloud vision LLM in an open-ended ReAct loop | Complex, visually-guided exploratory navigation | High token consumption and cost per task; higher step latency |
-| **Stagehand** | TypeScript SDK with targeted AI extraction and action primitives | Node.js developers building custom scraping and automation scripts | Generative LLM invocations per action; requires API keys |
-| **Playwright MCP** | Low-level browser automation tools called individually by agent | Granular control by an external LLM orchestrator | Accumulates large conversation context over multi-turn tasks |
+| **Cognitive Browser** | Dual-tier (local discriminative NLI cross-encoder + selective generative LLM escalation) | Form filling, structured multi-step web workflows, MCP-connected agents | Structured step instructions (`instruction` strings); local GPU/CPU or API router fallback |
+| **browser-use** | Single-tier vision-language model (VLM) running an iterative ReAct perception-action loop | Open-ended exploratory web browsing from high-level natural language goals | Cloud VLM API key (e.g. OpenAI / Anthropic) with vision support |
+| **Stagehand** | TypeScript framework combining Playwright with LLM-driven `act`, `extract`, and `observe` primitives | Node.js/TypeScript developer workflows and structured data extraction | LLM API key; Node.js runtime environment |
+| **Playwright MCP** | Exposes granular browser tools (click, fill, navigate, snapshot) directly to an external LLM orchestrator | External LLM assistants managing their own step-by-step browser interactions | External agent / orchestrator with full conversation context management |
 
 ---
 
 ## Security
 
 Cognitive Browser handles untrusted web content and executes browser interactions:
-- **SSRF Protection:** By default, private IP ranges (RFC 1918), loopback addresses, and cloud metadata endpoints (`169.254.169.254`) are blocked.
-- **Sensitive Data Masking:** Input values in `fill_value` operations can be masked in logs and telemetry to prevent credential exposure.
+- **SSRF Protection:** Loopback (`127.0.0.1`, `[::1]`), private IP ranges (RFC 1918, `fc00::/7`), link-local (`fe80::/10`), IPv4-mapped IPv6, and cloud metadata endpoints (`169.254.169.254`) are blocked by default. Landing URLs are re-checked after redirects. Domain allowlists can be enforced via `ALLOWED_DOMAINS`.
+- **Sensitive Data Masking:** `fill_value` operations are masked (`***`) by default in logs and telemetry to prevent accidental credential leakage. Users can opt out via `DISABLE_FILL_MASKING=true`.
+- **Prompt Injection from Page Content:** Untrusted webpage content and accessibility tree labels are passed to the Cortex LLM escalation tier. While inputs are length-capped and control characters are stripped (`sanitize_untrusted_text`), semantic prompt injection cannot be guaranteed to be filtered by text heuristics alone. Do not automate untrusted malicious websites without external container sandboxing.
+- **API Token Authentication:** The REST API and SSE service on port 8000 support token authentication via the `API_TOKEN` environment variable. `docker-compose.yml` binds to `127.0.0.1:8000` by default. **Do not expose port 8000 to public networks without setting `API_TOKEN`**.
 - For vulnerability reporting and full threat model analysis, see [SECURITY.md](SECURITY.md) and [docs/threat-model.md](docs/threat-model.md).
 
 ---
