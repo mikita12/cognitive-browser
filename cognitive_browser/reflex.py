@@ -192,32 +192,40 @@ class ReflexCore:
 
             boost = 0.0
 
-            # 1. Role keyword matching
+            # 1. Action type & role matching
+            wants_click = any(w in intent_lower for w in ["kliknij", "otwórz", "przejdź", "wybierz", "naciśnij", "click", "open", "select"])
+            wants_input = any(w in intent_lower for w in ["pole", "wpisz", "tekst", "textbox", "input", "wyszukiwark", "searchbox", "fill", "type"])
             wants_button = any(w in intent_lower for w in ["przycisk", "guzik", "button", "btn", "submit"])
             wants_link = any(w in intent_lower for w in ["link", "odnośnik", "href"])
-            wants_input = any(w in intent_lower for w in ["pole", "wpisz", "tekst", "textbox", "input", "wyszukiwark", "searchbox"])
+
+            if wants_input:
+                if role_lower in ["textbox", "searchbox", "combobox"]:
+                    boost += 0.20
+                else:
+                    boost -= 0.30
+            elif wants_click:
+                # Critical: A click action must NEVER target an input/textbox when interactive clickable elements exist
+                if role_lower in ["textbox", "searchbox", "combobox"]:
+                    boost -= 0.40
+                elif role_lower in ["button", "link", "tab", "menuitem"]:
+                    boost += 0.15
 
             if wants_button:
                 if role_lower == "button":
-                    boost += 0.08
+                    boost += 0.15
                 else:
-                    boost -= 0.15
+                    boost -= 0.20
             elif wants_link:
                 if role_lower == "link":
-                    boost += 0.08
+                    boost += 0.15
                 else:
-                    boost -= 0.15
-            elif wants_input:
-                if role_lower in ["textbox", "searchbox", "combobox"]:
-                    boost += 0.08
-                else:
-                    boost -= 0.15
+                    boost -= 0.20
 
             # 2. Token / stem matching between intent and element name
             intent_words = set(re.findall(r"\w{3,}", intent_lower))
             name_words = set(re.findall(r"\w{3,}", name_lower))
 
-            stop_words = {"lub", "oraz", "dla", "sie", "się", "jest", "albo", "przez", "jego", "pod", "nad", "the", "and", "for", "with"}
+            stop_words = {"lub", "oraz", "dla", "sie", "się", "jest", "albo", "przez", "jego", "pod", "nad", "the", "and", "for", "with", "kliknij", "otwórz", "przejdź", "wpisz"}
             meaningful_intent = {w for w in intent_words if w not in stop_words}
             meaningful_name = {w for w in name_words if w not in stop_words}
 
@@ -227,15 +235,15 @@ class ReflexCore:
                     return w1[:4] == w2[:4] or (w1[:min_len - 1] == w2[:min_len - 1])
                 return w1 in w2 or w2 in w1
 
-            stem_matches = 0
-            for iw in meaningful_intent:
-                if any(check_stems(iw, nw) for nw in meaningful_name):
-                    stem_matches += 1
+            exact_matches = sum(1 for iw in meaningful_intent if iw in meaningful_name)
+            stem_matches = sum(1 for iw in meaningful_intent if iw not in meaningful_name and any(check_stems(iw, nw) for nw in meaningful_name))
 
-            if stem_matches > 0:
+            if exact_matches > 0:
+                boost += min(0.30, exact_matches * 0.15)
+            elif stem_matches > 0:
                 boost += min(0.20, stem_matches * 0.10)
             elif len(meaningful_intent) > 0 and len(meaningful_name) > 0:
-                boost -= 0.05
+                boost -= 0.08
 
             return boost
 
