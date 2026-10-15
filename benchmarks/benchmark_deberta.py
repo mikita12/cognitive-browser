@@ -1,14 +1,15 @@
 """
-Benchmark i demonstracja na żywo:
-Porównanie:
-1. Klasyczny Agent LLM (Cloud API - Claude/GPT)
-2. Agent z Ollamą (Mały LLM generatywny 1.5B ze schematem JSON)
-3. Agent z DeBERTa-v3 (Czysty dyskryminacyjny model decyzyjny NLI na RTX 4070 Ti)
+Benchmark & Live Demonstration:
+Comparison:
+1. Traditional LLM Agent (Cloud API - Claude/GPT)
+2. Agent with Ollama (Small 1.5B generative LLM with JSON schema)
+3. Agent with DeBERTa-v3 (Pure discriminative NLI decision model on GPU)
 """
 
 import asyncio
 import sys
 import os
+import time
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../examples")))
 
@@ -26,68 +27,68 @@ except ImportError:
 
 async def run_deberta_benchmark():
     print("=" * 80)
-    print("BENCHMARK AGENTÓW: TRADYCYJNY LLM vs GENERATYWNA OLLAMA vs DYSKRYMINACYJNA DEBERTA")
+    print("AGENT BENCHMARK: TRADITIONAL LLM vs GENERATIVE OLLAMA vs DISCRIMINATIVE DEBERTA")
     print("=" * 80)
 
     test_url = "https://news.ycombinator.com/login"
     intent = "click the login button to submit credentials"
 
-    # Inicjalizacja modelu DeBERTa
+    # Initialize DeBERTa model
     router = DebertaDecisionRouter(model_name="cross-encoder/nli-deberta-v3-small")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
-        print(f"\n[1/4] Otwieram stronę testową w Playwrighcie: {test_url}")
+        print(f"\n[1/4] Navigating to benchmark page in Playwright: {test_url}")
         await page.goto(test_url)
 
-        # 1. Pełny DOM
+        # 1. Full DOM
         raw_html = await page.content()
         raw_html_len = len(raw_html)
         approx_raw_tokens = raw_html_len // 4
 
-        print(f"\n[2/4] Zrzut DOM i ekstrakcja kandydatów:")
-        print(f"  -> Surowy HTML: {raw_html_len:,} znaków (~{approx_raw_tokens:,} tokenów)")
+        print(f"\n[2/4] DOM Snapshot & Candidate Extraction:")
+        print(f"  -> Raw HTML size: {raw_html_len:,} characters (~{approx_raw_tokens:,} tokens)")
 
         t_ext = time.perf_counter()
         candidates = await DomCandidateExtractor.extract_interactive_elements(page)
         extract_ms = (time.perf_counter() - t_ext) * 1000
 
-        print(f"  -> Znaleziono elementów interaktywnych: {len(candidates)} (czas ekstrakcji: {extract_ms:.2f} ms)")
-        print(f"  -> Redukcja wielkości danych: {((raw_html_len - (len(candidates) * 50)) / raw_html_len) * 100:.1f}%")
+        print(f"  -> Interactive elements found: {len(candidates)} (extraction time: {extract_ms:.2f} ms)")
+        print(f"  -> Data size reduction: {((raw_html_len - (len(candidates) * 50)) / raw_html_len) * 100:.1f}%")
 
-        # 2. Wnioskowanie DeBERTa (System 1)
-        print(f"\n[3/4] Wnioskowanie dyskryminacyjne (DeBERTa-v3 NLI na GPU):")
+        # 2. DeBERTa inference (System 1)
+        print(f"\n[3/4] Discriminative inference (DeBERTa-v3 NLI on GPU):")
         decision = router.evaluate_candidates(intent=intent, candidates=candidates)
 
-        print(f"  -> Wybrany element (ref): {decision['target_ref']}")
-        print(f"  -> Akcja Playwright: {decision['tool_action']}")
-        print(f"  -> Pewność modelu (Entailment): {decision['confidence'] * 100:.1f}%")
-        print(f"  -> Czas wnioskowania DeBERTa: {decision['latency_ms']:.2f} ms!")
-        print(f"  -> Liczba wygenerowanych tokenów: 0 (Czyste prawdopodobieństwo tensorowe)")
+        print(f"  -> Selected element (ref): {decision['target_ref']}")
+        print(f"  -> Playwright action: {decision['tool_action']}")
+        print(f"  -> Model confidence (Entailment): {decision['confidence'] * 100:.1f}%")
+        print(f"  -> DeBERTa inference latency: {decision['latency_ms']:.2f} ms!")
+        print(f"  -> Tokens generated: 0 (Pure tensor probability)")
 
-        print("\n  Ranking pierwszych 3 kandydatów według DeBERTa:")
+        print("\n  Top 3 candidates ranked by DeBERTa:")
         for rank, c in enumerate(decision["ranked_candidates"][:3], 1):
             print(f"    {rank}. [{c['confidence_score']*100:5.1f}%] {c['ref']} | <{c['tag']}> {c.get('type') or ''} text='{c.get('text')}' name='{c.get('name')}'")
 
-        # 3. Wykonanie akcji w Playwrighcie
+        # 3. Action execution in Playwright
         chosen_ref = decision["target_ref"]
         if chosen_ref != "NONE":
-            print(f"\n[4/4] Wykonanie akcji w Playwrighcie:")
-            print(f"  -> Klikam selektor: [data-s1-ref='{chosen_ref}']...")
+            print(f"\n[4/4] Executing action in Playwright:")
+            print(f"  -> Clicking selector: [data-s1-ref='{chosen_ref}']...")
             await page.locator(f"[data-s1-ref='{chosen_ref}']").click()
-            print("  -> SUKCES! Playwright wykonał akcję bez pośrednictwa drogiego API.")
+            print("  -> SUCCESS! Playwright executed the action with zero cloud API overhead.")
 
-        # Tabela porównawcza
+        # Comparison summary table
         print("\n" + "=" * 80)
-        print("ZESTAWIENIE METRYK (PODSUMOWANIE)")
+        print("METRIC COMPARISON (SUMMARY)")
         print("=" * 80)
-        print(f"{'Metoda':<30} | {'Typ Modelu':<18} | {'Opóźnienie':<12} | {'Koszt tokenów':<15}")
+        print(f"{'Method':<32} | {'Model Type':<18} | {'Latency':<14} | {'Token Cost':<15}")
         print("-" * 80)
-        print(f"{'Tradycyjny Agent (Claude/GPT)':<30} | {'Generatywny API':<18} | {'~3000 - 5000 ms':<12} | {'~12 000 tok./krok':<15}")
-        print(f"{'Ollama (Qwen2.5-1.5B)':<30} | {'Generatywny LLM':<18} | {'~400 - 450 ms':<12} | {'Lokalny (0 zł)':<15}")
+        print(f"{'Traditional Agent (Claude/GPT)':<32} | {'Cloud Generative':<18} | {'~3000 - 5000 ms':<14} | {'~12,000 tok./step':<15}")
+        print(f"{'Local LLM (Qwen2.5-1.5B)':<32} | {'Generative LLM':<18} | {'~400 - 450 ms':<14} | {'Local ($0.00)':<15}")
         deberta_lat = f"{decision['latency_ms']} ms"
-        print(f"{'DeBERTa-v3 NLI (Nasz Router)':<30} | {'Dyskryminacyjny':<18} | {deberta_lat:<12} | {'0 tokenów (0 zł)':<15}")
+        print(f"{'DeBERTa-v3 NLI (Our Router)':<32} | {'Discriminative':<18} | {deberta_lat:<14} | {'0 tokens ($0.00)':<15}")
         print("=" * 80)
 
         await browser.close()

@@ -6,11 +6,12 @@ Parses page interactive elements into lightweight, token-efficient candidate str
 from typing import List, Dict, Any
 from playwright.async_api import Page
 
+
 class DomCandidateExtractor:
     """
-    Ekstraktor elementów interaktywnych.
-    Zamiast 50 000 znaków surowego HTML, wyciąga zwarty wektor kandydatów
-    z minimalnym kosztem tokenów (~20-50 tokenów na kandydata).
+    Interactive element candidate extractor.
+    Replaces 50,000+ characters of raw HTML with a compact vector of interactive candidates
+    with minimal token overhead (~20-50 tokens per candidate).
     """
 
     EXTRACT_JS = r"""
@@ -48,10 +49,10 @@ class DomCandidateExtractor:
             const id = el.id || '';
             const name = el.getAttribute('name') || '';
 
-            // Pomijamy puste elementy bez tekstu i bez przeznaczenia
+            // Skip empty decorative elements
             if (!text && !id && !name && tag !== 'input') return;
 
-            // Tworzymy unikalny atrybut referencyjny dla Playwrighta
+            // Generate unique reference attribute for Playwright targeting
             const ref = `s1-ref-${index}`;
             el.setAttribute('data-s1-ref', ref);
 
@@ -59,7 +60,7 @@ class DomCandidateExtractor:
                 ref: ref,
                 tag: tag,
                 role: role,
-                text: text.slice(0, 100), // Ograniczenie długości tekstu
+                text: text.slice(0, 100),
                 type: type,
                 id: id,
                 name: name
@@ -73,7 +74,7 @@ class DomCandidateExtractor:
     @classmethod
     async def extract_interactive_elements(cls, page: Page, max_elements: int = 40) -> List[Dict[str, Any]]:
         """
-        Pobiera listę interaktywnych elementów widocznych na stronie.
+        Retrieves list of interactive elements visible in viewport.
         """
         elements = await page.evaluate(cls.EXTRACT_JS)
         return elements[:max_elements]
@@ -81,8 +82,8 @@ class DomCandidateExtractor:
     @classmethod
     def format_for_prompt(cls, candidates: List[Dict[str, Any]]) -> str:
         """
-        Kompaktowe formatowanie kandydatów pod model decyzyjny.
-        Zużycie: ~10 tokenów na element.
+        Compact formatting of candidate elements for decision models.
+        Payload: ~10 tokens per element.
         """
         lines = []
         for c in candidates:

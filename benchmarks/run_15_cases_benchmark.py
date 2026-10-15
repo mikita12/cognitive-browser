@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 15 Real-World Web Automation Benchmark: Cognitive Browser (S1 DeBERTa + S2 Active Escalation) vs Base Playwright MCP.
-Pełny pomiar zadań doprowadzonych do 100% ukończenia.
-Gdy DeBERTa ma wątpliwości lub napotka modal/niejednoznaczność, System 2 (LLM) aktywnie pomaga.
-Dla kontrastu testowany jest bazowy Playwright MCP, w którym każdy krok wymaga pełnego ARIA Snapshot i odpytania LLM.
+Full measurement of end-to-end tasks driven to 100% completion.
+When DeBERTa encounters ambiguity or modal obstructions, System 2 (LLM) assists in real-time.
+Tested against standard Playwright MCP pattern where every single step requires full ARIA snapshots and cloud LLM calls.
 """
 
 import asyncio
@@ -22,8 +22,8 @@ except ImportError:
 TEST_CASES = [
     {
         "id": 1,
-        "category": "Transport kolejowy",
-        "name": "KOLEO - Wyszukiwanie połączenia kolejowego",
+        "category": "Rail Transport",
+        "name": "KOLEO - Train ticket connection search",
         "url": "https://koleo.pl",
         "steps": [
             {"instruction": "Stacja odjazdu", "fill_value": "Wrocław Główny"},
@@ -33,8 +33,8 @@ TEST_CASES = [
     },
     {
         "id": 2,
-        "category": "Logistyka i kurierzy",
-        "name": "InPost - Nawigacja do cennika paczkomatowego",
+        "category": "Logistics & Couriers",
+        "name": "InPost - Navigate to parcel locker pricing",
         "url": "https://inpost.pl",
         "steps": [
             {"instruction": "Cennik"},
@@ -44,7 +44,7 @@ TEST_CASES = [
     {
         "id": 3,
         "category": "E-Commerce (Standard)",
-        "name": "Books to Scrape - Filtrowanie kategorii książek",
+        "name": "Books to Scrape - Filter book categories",
         "url": "http://books.toscrape.com",
         "steps": [
             {"instruction": "Travel"},
@@ -53,31 +53,31 @@ TEST_CASES = [
     },
     {
         "id": 4,
-        "category": "Formularze wielopolowe",
-        "name": "HTTPBin - Wypełnianie zamówienia pizzy (Formularz HTML5)",
+        "category": "Multi-field Forms",
+        "name": "HTTPBin - Complete pizza order (HTML5 Form)",
         "url": "https://httpbin.org/forms/post",
         "steps": [
-            {"instruction": "Customer name", "fill_value": "Jan Kowalski"},
+            {"instruction": "Customer name", "fill_value": "John Doe"},
             {"instruction": "Telephone", "fill_value": "500600700"},
-            {"instruction": "E-mail address", "fill_value": "jan@kowalski.pl"},
+            {"instruction": "E-mail address", "fill_value": "john@doe.com"},
             {"instruction": "Large"},
             {"instruction": "Bacon"}
         ]
     },
     {
         "id": 5,
-        "category": "Marketplace / Ogłoszenia",
-        "name": "OLX - Wyszukiwanie elektroniki",
+        "category": "Marketplace / Classifieds",
+        "name": "OLX - Search electronics offers",
         "url": "https://www.olx.pl",
         "steps": [
-            {"instruction": "pole wyszukiwania przedmiotu", "fill_value": "PlayStation 5"},
+            {"instruction": "search query input", "fill_value": "PlayStation 5"},
             {"instruction": "Szukaj"}
         ]
     },
     {
         "id": 6,
-        "category": "Społeczność i newsy",
-        "name": "Hacker News - Nawigacja do sekcji Show HN",
+        "category": "Community & Tech News",
+        "name": "Hacker News - Navigate to Show HN discussion",
         "url": "https://news.ycombinator.com",
         "steps": [
             {"instruction": "show"},
@@ -86,8 +86,8 @@ TEST_CASES = [
     },
     {
         "id": 7,
-        "category": "Programowanie / Open Source",
-        "name": "GitHub Trending - Przegląd popularnych repozytoriów",
+        "category": "Software / Open Source",
+        "name": "GitHub Trending - Explore trending repositories",
         "url": "https://github.com/trending",
         "steps": [
             {"instruction": "Spoken Language"},
@@ -96,18 +96,18 @@ TEST_CASES = [
     },
     {
         "id": 8,
-        "category": "Polski E-Commerce",
-        "name": "Morele.net - Wyszukiwanie sprzętu komputerowego",
+        "category": "E-Commerce (Electronics)",
+        "name": "Morele.net - Search computer peripherals",
         "url": "https://www.morele.net",
         "steps": [
-            {"instruction": "wyszukiwarka produktów", "fill_value": "Klawiatura mechaniczna"},
+            {"instruction": "product search input", "fill_value": "Mechanical keyboard"},
             {"instruction": "szukaj"}
         ]
     },
     {
         "id": 9,
-        "category": "E-Commerce / Cytaty",
-        "name": "Quotes to Scrape - Filtrowanie cytatów po tagu",
+        "category": "E-Commerce / Quotes",
+        "name": "Quotes to Scrape - Filter quotes by tag",
         "url": "http://quotes.toscrape.com",
         "steps": [
             {"instruction": "humor"},
@@ -116,8 +116,8 @@ TEST_CASES = [
     },
     {
         "id": 10,
-        "category": "Gastronomia / Pizzeria",
-        "name": "Express Pizza - Wybór opcji dostawy Detroit Style",
+        "category": "Food Delivery / Pizzeria",
+        "name": "Express Pizza - Select Detroit Style delivery option",
         "url": "https://expresspizza.pl",
         "steps": [
             {"instruction": "DOSTAWA DO DOMU"},
@@ -126,8 +126,8 @@ TEST_CASES = [
     },
     {
         "id": 11,
-        "category": "Gastronomia / Pizzeria rzemieślnicza",
-        "name": "Mania Smaku - Wybór oferty pizzy",
+        "category": "Food Delivery / Artisanal Pizzeria",
+        "name": "Mania Smaku - Select pizza menu",
         "url": "https://mania.pizza",
         "steps": [
             {"instruction": "Zamów online"},
@@ -136,8 +136,8 @@ TEST_CASES = [
     },
     {
         "id": 12,
-        "category": "Lokalna gastronomia",
-        "name": "Pizzu Wrocław - Sprawdzenie oferty online",
+        "category": "Local Food Delivery",
+        "name": "Pizzu Wrocław - Check lunch specials online",
         "url": "https://pizzu.pl",
         "steps": [
             {"instruction": "Menu"},
@@ -146,8 +146,8 @@ TEST_CASES = [
     },
     {
         "id": 13,
-        "category": "Transport publiczny",
-        "name": "E-Podróżnik - Wyszukiwanie relacji Wrocław - Kraków",
+        "category": "Public Transportation",
+        "name": "E-Podróżnik - Connection search Wroclaw to Krakow",
         "url": "https://www.e-podroznik.pl",
         "steps": [
             {"instruction": "Skąd", "fill_value": "Wrocław"},
@@ -157,8 +157,8 @@ TEST_CASES = [
     },
     {
         "id": 14,
-        "category": "Administracja publiczna",
-        "name": "Gov.pl - Wyszukiwanie usługi dowodu osobistego",
+        "category": "Public Administration",
+        "name": "Gov.pl - Search ID card online procedure",
         "url": "https://www.gov.pl",
         "steps": [
             {"instruction": "Szukaj w serwisie", "fill_value": "Dowód osobisty"},
@@ -167,8 +167,8 @@ TEST_CASES = [
     },
     {
         "id": 15,
-        "category": "Transport miejski",
-        "name": "MPK Wrocław - Rozkład jazdy linii tramwajowej 8",
+        "category": "Urban Transit",
+        "name": "MPK Wrocław - Tram line timetable check",
         "url": "https://www.wroclaw.pl/komunikacja/rozklady-jazdy",
         "steps": [
             {"instruction": "8 Przejdź do rozkładu linii"}
@@ -180,9 +180,9 @@ TEST_CASES = [
 async def run_benchmark():
     device = "cuda" if torch.cuda.is_available() else ("mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu")
     print("=" * 95)
-    print("🚀 WIELKI BENCHMARK: 15 PRZYPADKÓW AUTOMATYZACJI WEBOWEJ DO 100% UKOŃCZENIA")
-    print(f"   Urządzenie: {device.upper()} | System 1 (DeBERTa-v3) + System 2 (LLM Active Escalation)")
-    print("   VS Bazowy Playwright MCP (Standard Industry Agent ze snapshotami ARIA)")
+    print("🚀 COMPREHENSIVE BENCHMARK: 15 REAL-WORLD WEB AUTOMATION TASKS TO 100% COMPLETION")
+    print(f"   Hardware: {device.upper()} | System 1 (DeBERTa-v3) + System 2 (LLM Active Escalation)")
+    print("   VS Base Playwright MCP (Standard Industry Agent with repeated ARIA dumps)")
     print("=" * 95)
 
     orch = AgentOrchestrator(device=device)
@@ -198,12 +198,12 @@ async def run_benchmark():
             steps = tc["steps"]
 
             print(f"\n[{case_id:02d}/15] {name}")
-            print(f"       URL: {url} | Liczba kroków: {len(steps)}")
+            print(f"       URL: {url} | Steps: {len(steps)}")
 
             # -----------------------------------------------------------------
-            # TEST A: COGNITIVE BROWSER (SYSTEM 1 + SYSTEM 2 AKTYWNA ESKALACJA)
+            # TEST A: COGNITIVE BROWSER (SYSTEM 1 + SYSTEM 2 ACTIVE ESCALATION)
             # -----------------------------------------------------------------
-            print("  ⚡ [Cognitive Browser] Wykonuję zadanie z aktywną asystą S2...")
+            print("  ⚡ [Cognitive Browser] Executing task with active S2 assistance...")
             cog_page = await browser.new_page()
             try:
                 cog_res = await orch.execute_task(page=cog_page, url=url, steps=steps)
@@ -226,15 +226,15 @@ async def run_benchmark():
             cog_s2_tokens = cog_res.get("system2_tokens", 0)
             cog_escalations = cog_res.get("escalations_count", 0)
 
-            # Do tokenów doliczamy minimalny narzut protokołu (JSON payload dla agenta)
+            # Add protocol JSON overhead
             cog_total_tokens = 150 + int(len(json.dumps(steps)) / 3.5) + cog_s2_tokens
 
-            print(f"     Status: {'✅ UKOŃCZONE 100%' if cog_success else '⚠️ CZĘŚCIOWE'} | Czas: {cog_time:.2f} s | GPU: {cog_gpu:.1f} ms | Eskalacje: {cog_escalations} | S2 Tokeny: {cog_s2_tokens} | Razem: ~{cog_total_tokens} tok.")
+            print(f"     Status: {'✅ 100% COMPLETED' if cog_success else '⚠️ PARTIAL'} | Time: {cog_time:.2f} s | GPU: {cog_gpu:.1f} ms | Escalations: {cog_escalations} | S2 Tokens: {cog_s2_tokens} | Total: ~{cog_total_tokens} tok.")
 
             # -----------------------------------------------------------------
-            # TEST B: BAZOWY PLAYWRIGHT MCP (WYKONANIE KROKÓW Z PEŁNYMI SNAPSHOTAMI)
+            # TEST B: BASE PLAYWRIGHT MCP (STANDARD STEP-BY-STEP REASONING)
             # -----------------------------------------------------------------
-            print("  🐢 [Base Playwright MCP] Symulacja pełnej pętli standardowego agenta MCP...")
+            print("  🐢 [Base Playwright MCP] Simulating standard cloud LLM agent loop...")
             base_page = await browser.new_page()
             base_t0 = time.perf_counter()
             base_roundtrips = 0
@@ -249,24 +249,22 @@ async def run_benchmark():
                 await base_page.wait_for_timeout(1000)
                 base_roundtrips += 1
 
-                # 2. browser_snapshot (strona początkowa)
+                # 2. browser_snapshot (initial page)
                 snap_init = await base_page.aria_snapshot()
                 snap_init_tokens = int(len(snap_init) / 3.5)
                 base_tokens_accumulated += snap_init_tokens + 350
                 base_roundtrips += 1
 
-                # 3. Wykonanie kroków - w Playwright MCP model wysyła tool call, dostaje odpowiedź i kolejny snapshot
+                # 3. Step execution loop
                 for s in steps:
                     val = s.get("fill_value")
                     inst = s.get("instruction")
 
                     base_roundtrips += 1
-                    # Historia konwersacji w Playwright MCP rośnie z każdym krokiem:
-                    # System prompt + historia poprzednich kroków + snapshot + wywołanie narzędzia
+                    # Prompt context grows with each step in standard MCP ReAct loops
                     step_context_tokens = snap_init_tokens + (base_roundtrips * 400)
                     base_tokens_accumulated += step_context_tokens
 
-                    # Fizyczne wykonanie kroku przez Playwright
                     try:
                         if val:
                             loc = base_page.get_by_role("textbox", name=inst).first
@@ -285,7 +283,7 @@ async def run_benchmark():
                         pass
                     await base_page.wait_for_timeout(500)
 
-                # 4. browser_snapshot końcowy dla LLM
+                # 4. Final browser_snapshot
                 snap_final = await base_page.aria_snapshot()
                 snap_final_tokens = int(len(snap_final) / 3.5)
                 base_tokens_accumulated += snap_final_tokens + (base_roundtrips * 200)
@@ -298,13 +296,11 @@ async def run_benchmark():
                 await base_page.close()
 
             base_browser_time = time.perf_counter() - base_t0
-            # Realistyczny czas standardowego agenta MCP w chmurze (Anthropic Claude 3.5 Sonnet / OpenAI GPT-4o: ~2.8 s na roundtrip)
             llm_cloud_network_latency = base_roundtrips * 2.8
             base_realistic_time = base_browser_time + llm_cloud_network_latency
 
-            print(f"     Status: {'✅ UKOŃCZONE' if base_success else '❌ BŁĄD'} | Roundtrips: {base_roundtrips} | Czas realny: {base_realistic_time:.2f} s | Tokeny: ~{base_tokens_accumulated}")
+            print(f"     Status: {'✅ COMPLETED' if base_success else '❌ ERROR'} | Roundtrips: {base_roundtrips} | Realistic Time: {base_realistic_time:.2f} s | Tokens: ~{base_tokens_accumulated}")
 
-            # Zapis metryki przypadku
             results.append({
                 "id": case_id,
                 "category": tc["category"],
@@ -335,12 +331,12 @@ async def run_benchmark():
 
         await browser.close()
 
-    # Zapis surowych danych JSON
+    # Save raw JSON results
     output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "benchmark_15_cases_results.json")
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
 
-    # Podsumowanie i statystyki zbiorcze
+    # Summary and aggregate statistics
     total_cog_tokens = sum(r["cognitive"]["total_tokens"] for r in results)
     total_base_tokens = sum(r["base_playwright"]["tokens"] for r in results)
     avg_cog_time = sum(r["cognitive"]["total_time_s"] for r in results) / len(results)
@@ -350,16 +346,16 @@ async def run_benchmark():
     total_escalations = sum(r["cognitive"]["escalations_count"] for r in results)
 
     print("\n" + "=" * 95)
-    print("📊 PODSUMOWANIE WIELKIEGO BENCHMARKU (15 PRZYPADKÓW)")
+    print("📊 BENCHMARK SUMMARY (15 REAL-WORLD CASES)")
     print("=" * 95)
-    print(f"Ukończenie zadań: Cognitive Browser: {cog_completed_count}/15 (100% z asystą S2) | Base Playwright: {base_completed_count}/15")
-    print(f"Liczba eskalacji do Systemu 2: {total_escalations} (wszystkie rozwiązane w pętli)")
-    print(f"Zużycie tokenów:  Cognitive: {total_cog_tokens:,} tok. | Base Playwright: {total_base_tokens:,} tok.")
-    print(f"Redukcja tokenów: {((total_base_tokens - total_cog_tokens) / total_base_tokens * 100):.1f}% MNIEJ TOKENÓW!")
-    print(f"Średni czas:      Cognitive: {avg_cog_time:.2f} s | Base Playwright: {avg_base_time:.2f} s")
-    print(f"Przyspieszenie:   {avg_base_time / avg_cog_time:.1f}x SZYBCIEJ!")
+    print(f"Task Completion: Cognitive Browser: {cog_completed_count}/15 (100% with S2) | Base Playwright: {base_completed_count}/15")
+    print(f"System 2 Escalations: {total_escalations} (all successfully resolved in loop)")
+    print(f"Token Consumption: Cognitive: {total_cog_tokens:,} tok. | Base Playwright: {total_base_tokens:,} tok.")
+    print(f"Token Reduction:   {((total_base_tokens - total_cog_tokens) / total_base_tokens * 100):.1f}% LESS TOKENS!")
+    print(f"Average Duration:  Cognitive: {avg_cog_time:.2f} s | Base Playwright: {avg_base_time:.2f} s")
+    print(f"Speedup:           {avg_base_time / avg_cog_time:.1f}x FASTER!")
     print("=" * 95)
-    print("Zapisano raport do pliku:", output_path)
+    print("Saved report to file:", output_path)
 
 
 if __name__ == "__main__":

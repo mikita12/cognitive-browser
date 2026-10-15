@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Benchmark: Bazowy oficjalny Playwright MCP (Standardowe podejście większości programistów).
-Mierzy liczbę roundtripów, rozmiar snapshotów DOM w bajtach/tokenach oraz czas trwania.
+Benchmark: Base Official Playwright MCP (Standard Industry Agent Pattern).
+Measures roundtrips, DOM snapshot sizes in bytes/tokens, and execution latency.
 """
 
 import asyncio
@@ -9,9 +9,10 @@ import time
 import json
 from playwright.async_api import async_playwright
 
+
 async def benchmark_base_playwright():
     print("=" * 80)
-    print("🚀 START BENCHMARKU: BAZOWY PLAYWRIGHT MCP (Standard branżowy)")
+    print("🚀 BENCHMARK: BASE PLAYWRIGHT MCP (Industry Baseline)")
     print("=" * 80)
 
     t0 = time.perf_counter()
@@ -24,16 +25,16 @@ async def benchmark_base_playwright():
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
 
-        # KROK 1: browser_navigate
-        print("\n[Krok 1] browser_navigate('https://koleo.pl')...")
+        # STEP 1: browser_navigate
+        print("\n[Step 1] browser_navigate('https://koleo.pl')...")
         t_step = time.perf_counter()
         await page.goto("https://koleo.pl", wait_until="domcontentloaded")
         await page.wait_for_timeout(1000)
         roundtrips += 1
         step_times.append(("browser_navigate", time.perf_counter() - t_step))
 
-        # KROK 2: browser_snapshot (Standardowy Playwright MCP zrzuca stan strony)
-        print("[Krok 2] browser_snapshot() strony głównej...")
+        # STEP 2: browser_snapshot (Standard Playwright MCP dumps full page state)
+        print("[Step 2] browser_snapshot() on homepage...")
         t_step = time.perf_counter()
         snapshot_main_str = await page.aria_snapshot()
         html_main_str = await page.content()
@@ -42,27 +43,27 @@ async def benchmark_base_playwright():
         tokens_total += tokens_step_2_aria
         roundtrips += 1
         step_times.append(("browser_snapshot_main", time.perf_counter() - t_step))
-        print(f"  -> Rozmiar ARIA YAML: {len(snapshot_main_str)} bajtów (~{tokens_step_2_aria} tokenów)")
-        print(f"  -> Rozmiar pełnego HTML DOM: {len(html_main_str)} bajtów (~{tokens_step_2_html} tokenów)")
+        print(f"  -> ARIA YAML size: {len(snapshot_main_str)} bytes (~{tokens_step_2_aria} tokens)")
+        print(f"  -> Raw HTML DOM size: {len(html_main_str)} bytes (~{tokens_step_2_html} tokens)")
 
-        # KROK 3: browser_type (Stacja odjazdu)
-        print("[Krok 3] browser_type(Stacja odjazdu = 'Wrocław Główny')...")
+        # STEP 3: browser_type (Departure station)
+        print("[Step 3] browser_type(Departure station = 'Wroclaw Central')...")
         t_step = time.perf_counter()
         await page.get_by_role("combobox", name="Stacja odjazdu").fill("Wrocław Główny")
         await page.wait_for_timeout(500)
         roundtrips += 1
         step_times.append(("browser_type_departure", time.perf_counter() - t_step))
 
-        # KROK 4: browser_type (Stacja przyjazdu)
-        print("[Krok 4] browser_type(Stacja przyjazdu = 'Warszawa Centralna')...")
+        # STEP 4: browser_type (Arrival station)
+        print("[Step 4] browser_type(Arrival station = 'Warszawa Centralna')...")
         t_step = time.perf_counter()
         await page.get_by_role("combobox", name="Stacja przyjazdu").fill("Warszawa Centralna")
         await page.wait_for_timeout(500)
         roundtrips += 1
         step_times.append(("browser_type_arrival", time.perf_counter() - t_step))
 
-        # KROK 5: browser_click (Znajdź połączenie)
-        print("[Krok 5] browser_click('Znajdź połączenie')...")
+        # STEP 5: browser_click (Search connections)
+        print("[Step 5] browser_click('Search connections')...")
         t_step = time.perf_counter()
         await page.get_by_role("button", name=" Znajdź połączenie").click()
         await page.wait_for_load_state("domcontentloaded")
@@ -70,34 +71,35 @@ async def benchmark_base_playwright():
         roundtrips += 1
         step_times.append(("browser_click_search", time.perf_counter() - t_step))
 
-        # KROK 6: browser_snapshot (Zrzut strony wyników z połączeniami)
-        print("[Krok 6] browser_snapshot() strony z wynikami...")
+        # STEP 6: browser_snapshot (Results page snapshot)
+        print("[Step 6] browser_snapshot() on search results...")
         t_step = time.perf_counter()
         snapshot_results_str = await page.aria_snapshot()
         tokens_step_6 = int(len(snapshot_results_str) / 3.5)
         tokens_total += tokens_step_6
         roundtrips += 1
         step_times.append(("browser_snapshot_results", time.perf_counter() - t_step))
-        print(f"  -> Rozmiar drzewa wyników: {len(snapshot_results_str)} bajtów (~{tokens_step_6} tokenów)")
+        print(f"  -> Results ARIA tree size: {len(snapshot_results_str)} bytes (~{tokens_step_6} tokens)")
 
-        # Podsumowanie
+        # Summary
         total_browser_time = time.perf_counter() - t0
-        
-        # Obliczenie rzeczywistego czasu z uwzględnieniem narzutu LLM na każdy roundtrip:
-        # Standardowy LLM w chmurze (Claude 3.5 Sonnet / GPT-4o) potrzebuje ~3.5 sekundy na przetworzenie każdego zrzutu i decyzję:
+
+        # Realistic latency calculation including cloud LLM roundtrip overhead:
+        # Standard cloud LLM (Claude 3.5 Sonnet / GPT-4o) requires ~3.5s per snapshot reasoning roundtrip:
         llm_delay_per_roundtrip = 3.5
         realistic_total_time = total_browser_time + (roundtrips * llm_delay_per_roundtrip)
 
         print("\n" + "=" * 80)
-        print("📊 WYNIKI BAZOWEGO PLAYWRIGHT MCP:")
+        print("📊 BASE PLAYWRIGHT MCP RESULTS:")
         print("=" * 80)
-        print(f"Liczba zapytań do LLM (Roundtrips): {roundtrips}")
-        print(f"Czysty czas operacji przeglądarki: {total_browser_time:.2f} s")
-        print(f"Szacowany realny czas z narzutem LLM (~3.5 s / krok): {realistic_total_time:.2f} s")
-        print(f"Łączny rozmiar przesłanych danych do LLM: {len(snapshot_main_str) + len(snapshot_results_str)} bajtów")
-        print(f"Łączne zużycie tokenów wejściowych (Input Context): ~{tokens_total} tokenów")
+        print(f"LLM Queries (Roundtrips): {roundtrips}")
+        print(f"Raw Browser Execution Time: {total_browser_time:.2f} s")
+        print(f"Estimated Realistic Duration with LLM Overhead (~3.5 s / step): {realistic_total_time:.2f} s")
+        print(f"Total Payload Delivered to LLM: {len(snapshot_main_str) + len(snapshot_results_str)} bytes")
+        print(f"Total Input Context Tokens Consumed: ~{tokens_total} tokens")
 
         await browser.close()
+
 
 if __name__ == "__main__":
     asyncio.run(benchmark_base_playwright())

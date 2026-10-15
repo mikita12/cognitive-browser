@@ -1,8 +1,8 @@
 [
   {
     "id": 1,
-    "category": "Transport kolejowy",
-    "name": "KOLEO - Wyszukiwanie połączenia kolejowego",
+    "category": "Rail Transport",
+    "name": "KOLEO - Train ticket connection search",
     "url": "https://koleo.pl",
     "steps_count": 3,
     "cognitive": {
@@ -28,8 +28,8 @@
   },
   {
     "id": 2,
-    "category": "Logistyka i kurierzy",
-    "name": "InPost - Nawigacja do cennika paczkomatowego",
+    "category": "Logistics & Couriers",
+    "name": "InPost - Navigate to parcel locker pricing",
     "url": "https://inpost.pl",
     "steps_count": 2,
     "cognitive": {
@@ -56,7 +56,7 @@
   {
     "id": 3,
     "category": "E-Commerce (Standard)",
-    "name": "Books to Scrape - Filtrowanie kategorii książek",
+    "name": "Books to Scrape - Filter book categories",
     "url": "http://books.toscrape.com",
     "steps_count": 2,
     "cognitive": {
@@ -82,8 +82,8 @@
   },
   {
     "id": 4,
-    "category": "Formularze wielopolowe",
-    "name": "HTTPBin - Wypełnianie zamówienia pizzy (Formularz HTML5)",
+    "category": "Multi-field Forms",
+    "name": "HTTPBin - Complete pizza order (HTML5 Form)",
     "url": "https://httpbin.org/forms/post",
     "steps_count": 5,
     "cognitive": {
@@ -109,8 +109,8 @@
   },
   {
     "id": 5,
-    "category": "Marketplace / Ogłoszenia",
-    "name": "OLX - Wyszukiwanie elektroniki",
+    "category": "Marketplace / Classifieds",
+    "name": "OLX - Search electronics offers",
     "url": "https://www.olx.pl",
     "steps_count": 2,
     "cognitive": {
@@ -136,8 +136,8 @@
   },
   {
     "id": 6,
-    "category": "Społeczność i newsy",
-    "name": "Hacker News - Nawigacja do sekcji Show HN",
+    "category": "Community & Tech News",
+    "name": "Hacker News - Navigate to Show HN discussion",
     "url": "https://news.ycombinator.com",
     "steps_count": 2,
     "cognitive": {
@@ -163,8 +163,8 @@
   },
   {
     "id": 7,
-    "category": "Programowanie / Open Source",
-    "name": "GitHub Trending - Przegląd popularnych repozytoriów",
+    "category": "Software / Open Source",
+    "name": "GitHub Trending - Explore trending repositories",
     "url": "https://github.com/trending",
     "steps_count": 2,
     "cognitive": {
@@ -190,8 +190,8 @@
   },
   {
     "id": 8,
-    "category": "Polski E-Commerce",
-    "name": "Morele.net - Wyszukiwanie sprzętu komputerowego",
+    "category": "E-Commerce (Electronics)",
+    "name": "Morele.net - Search computer peripherals",
     "url": "https://www.morele.net",
     "steps_count": 2,
     "cognitive": {
@@ -217,8 +217,8 @@
   },
   {
     "id": 9,
-    "category": "E-Commerce / Cytaty",
-    "name": "Quotes to Scrape - Filtrowanie cytatów po tagu",
+    "category": "E-Commerce / Quotes",
+    "name": "Quotes to Scrape - Filter quotes by tag",
     "url": "http://quotes.toscrape.com",
     "steps_count": 2,
     "cognitive": {
@@ -244,8 +244,8 @@
   },
   {
     "id": 10,
-    "category": "Gastronomia / Pizzeria",
-    "name": "Express Pizza - Wybór opcji dostawy Detroit Style",
+    "category": "Food Delivery / Pizzeria",
+    "name": "Express Pizza - Select Detroit Style delivery option",
     "url": "https://expresspizza.pl",
     "steps_count": 2,
     "cognitive": {
@@ -271,8 +271,8 @@
   },
   {
     "id": 11,
-    "category": "Gastronomia / Pizzeria rzemieślnicza",
-    "name": "Mania Smaku - Wybór oferty pizzy",
+    "category": "Food Delivery / Artisanal Pizzeria",
+    "name": "Mania Smaku - Select pizza menu",
     "url": "https://mania.pizza",
     "steps_count": 2,
     "cognitive": {
@@ -298,8 +298,8 @@
   },
   {
     "id": 12,
-    "category": "Lokalna gastronomia",
-    "name": "Pizzu Wrocław - Sprawdzenie oferty online",
+    "category": "Local Food Delivery",
+    "name": "Pizzu Wrocław - Check lunch specials online",
     "url": "https://pizzu.pl",
     "steps_count": 2,
     "cognitive": {
@@ -325,8 +325,8 @@
   },
   {
     "id": 13,
-    "category": "Transport publiczny",
-    "name": "E-Podróżnik - Wyszukiwanie relacji Wrocław - Kraków",
+    "category": "Public Transportation",
+    "name": "E-Podróżnik - Connection search Wroclaw to Krakow",
     "url": "https://www.e-podroznik.pl",
     "steps_count": 3,
     "cognitive": {
@@ -352,8 +352,8 @@
   },
   {
     "id": 14,
-    "category": "Administracja publiczna",
-    "name": "Gov.pl - Wyszukiwanie usługi dowodu osobistego",
+    "category": "Public Administration",
+    "name": "Gov.pl - Search ID card online procedure",
     "url": "https://www.gov.pl",
     "steps_count": 2,
     "cognitive": {
@@ -379,8 +379,8 @@
   },
   {
     "id": 15,
-    "category": "Transport miejski",
-    "name": "MPK Wrocław - Rozkład jazdy linii tramwajowej 8",
+    "category": "Urban Transit",
+    "name": "MPK Wrocław - Tram line timetable check",
     "url": "https://www.wroclaw.pl/komunikacja/rozklady-jazdy",
     "steps_count": 1,
     "cognitive": {

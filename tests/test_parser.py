@@ -9,19 +9,19 @@ class TestAriaElementParser(unittest.TestCase):
     def setUp(self):
         self.sample_snapshot = """
 - banner:
-  - heading "OLX.pl" [level=1]
-  - link "Zaloguj się":
-    - /url: "/mojolx/"
+  - heading "Marketplace" [level=1]
+  - link "Sign In":
+    - /url: "/account/login"
 - main:
-  - searchbox "Czego szukasz?"
-  - combobox "Lokalizacja":
-    - /placeholder: "Wpisz miejscowość..."
-  - button "Szukaj"
+  - searchbox "What are you looking for?"
+  - combobox "Location":
+    - /placeholder: "Enter city..."
+  - button "Search"
   - list:
     - listitem:
-      - link "iPhone 15 Pro 128GB - Stan Idealny":
-        - /url: "/d/oferta/iphone-15-pro-CID99.html"
-        - text: "3 400 zł do negocjacji"
+      - link "iPhone 15 Pro 128GB - Mint Condition":
+        - /url: "/item/iphone-15-pro-123.html"
+        - text: "$850 negotiable"
 """
 
     def test_parse_candidates(self):
@@ -31,17 +31,17 @@ class TestAriaElementParser(unittest.TestCase):
         # Check searchbox parsed
         searchbox = next((c for c in candidates if c["role"] == "searchbox"), None)
         self.assertIsNotNone(searchbox)
-        self.assertEqual(searchbox["name"], "Czego szukasz?")
+        self.assertEqual(searchbox["name"], "What are you looking for?")
 
         # Check button parsed
         button = next((c for c in candidates if c["role"] == "button"), None)
         self.assertIsNotNone(button)
-        self.assertEqual(button["name"], "Szukaj")
+        self.assertEqual(button["name"], "Search")
 
         # Check link with URL parsed
-        login_link = next((c for c in candidates if c["name"] == "Zaloguj się"), None)
+        login_link = next((c for c in candidates if c["name"] == "Sign In"), None)
         self.assertIsNotNone(login_link)
-        self.assertEqual(login_link["url"], "/mojolx/")
+        self.assertEqual(login_link["url"], "/account/login")
 
     def test_require_input_only_filter(self):
         candidates = AriaElementParser.parse_snapshot(

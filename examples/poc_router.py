@@ -1,11 +1,12 @@
 """
-PoC: Prototyp pętli decyzyjnej z wykorzystaniem modelu decyzyjnego w Ollamie
-oraz automatyzacji Playwright.
+PoC: Decision loop prototype using decision models in Ollama
+and Playwright browser automation.
 """
 
 import asyncio
 from playwright.async_api import async_playwright
 import ollama
+
 
 class DecisionRouter:
     def __init__(self, model_name: str = "nimble"):
@@ -13,7 +14,7 @@ class DecisionRouter:
 
     async def decide_binary(self, state_text: str, question: str, true_crit: str, false_crit: str) -> bool:
         """
-        Zwraca szybką decyzję True/False z wykorzystaniem endpointu System One.
+        Returns a fast True/False decision using the System One endpoint.
         """
         try:
             res = ollama.systemone(
@@ -32,11 +33,11 @@ class DecisionRouter:
             )
             return res.answers["decision"]["value"]
         except Exception:
-            # Fallback dla standardowego interfejsu ollama z wymuszeniem JSON
+            # Fallback for standard ollama chat interface with JSON format enforcement
             res = ollama.chat(
                 model="llama3.2:1b",
                 messages=[
-                    {"role": "user", "content": f"Oceń stan: {state_text}\nPytanie: {question}"}
+                    {"role": "user", "content": f"Evaluate state: {state_text}\nQuestion: {question}"}
                 ],
                 format={
                     "type": "object",
@@ -48,28 +49,30 @@ class DecisionRouter:
             import json
             return json.loads(res["message"]["content"]).get("decision", False)
 
+
 async def main():
     router = DecisionRouter()
-    
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         await page.goto("https://news.ycombinator.com")
-        
-        # Pobieramy uproszczony tekst strony
+
+        # Retrieve simplified page text
         content = await page.inner_text("body")
         sample_state = content[:1500]
 
-        print("[System 1] Analizuję stronę pod kątem obecności formularza logowania...")
+        print("[System 1] Inspecting page for visible login form...")
         is_login = await router.decide_binary(
             state_text=sample_state,
-            question="Czy na stronie jest aktualnie wyświetlony widoczny formularz logowania?",
-            true_crit="Widoczne są pola 'username' i 'password' do wpisania danych.",
-            false_crit="To jest zwykła strona z listą artykułów/treścią."
+            question="Is there currently a visible login form displayed on the page?",
+            true_crit="Username and password fields for input are visible.",
+            false_crit="This is a regular page with an article/post list."
         )
-        print(f"-> Wynik szybkiej decyzji: {is_login}")
-        
+        print(f"-> Fast decision result: {is_login}")
+
         await browser.close()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

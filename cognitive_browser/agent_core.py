@@ -1,7 +1,7 @@
 """
-AgentCore - Uniwersalny Autonomiczny Agent Przeglądarkowy (ARIA + DeBERTa System 1).
-Działa na dowolnej stronie internetowej, wykorzystując oficjalne Drzewo Dostępności (ARIA)
-oraz model dyskryminacyjny DeBERTa-v3 do podejmowania decyzji w ułamku sekundy.
+AgentCore - Universal Autonomous Browser Agent (ARIA + DeBERTa System 1).
+Navigates web applications using official Accessibility Trees (ARIA snapshots)
+and DeBERTa-v3 discriminative decision routing in sub-50ms with 0 LLM tokens.
 """
 
 import asyncio
@@ -16,7 +16,7 @@ except ImportError:
 
 
 class AriaElementParser:
-    """Parsuje oficjalny format page.aria_snapshot() na obiekty semantyczne."""
+    """Parses official page.aria_snapshot() YAML format into semantic candidate objects."""
 
     INTERACTIVE_ROLES = {
         "button", "link", "combobox", "textbox", "searchbox",
@@ -39,13 +39,13 @@ class AriaElementParser:
             if not clean.startswith("-"):
                 continue
 
-            # Jeśli linia to url dla poprzedniego linku
+            # If line is URL for the preceding link candidate
             if clean.startswith("- /url:") and candidates:
                 u = clean.replace("- /url:", "").strip().strip('"').strip("'")
                 candidates[-1]["url"] = u
                 continue
 
-            # Jeśli linia to placeholder dla poprzedniego elementu
+            # If line is placeholder for the preceding input candidate
             if clean.startswith("- /placeholder:") and candidates:
                 ph = clean.replace("- /placeholder:", "").strip().strip('"').strip("'")
                 candidates[-1]["placeholder"] = ph
@@ -85,8 +85,8 @@ class AriaElementParser:
 
 class AgentCore:
     """
-    Główna pętla agenta kognitywnego (System 1 + Playwright).
-    Zero halucynacji selektorów CSS, natywne lokatory ARIA.
+    Core cognitive browser agent engine (System 1 + Playwright).
+    Eliminates fragile CSS selectors by leveraging native ARIA locators.
     """
 
     def __init__(
@@ -107,14 +107,18 @@ class AgentCore:
 
     async def auto_dismiss_overlays(self, page: Page) -> bool:
         """
-        Uniwersalne wykrywanie i zamykanie banerów cookies / zgód / modali RODO.
-        Działa na dowolnej stronie w ~30-50 ms.
+        Universal detection and dismissal of cookie / GDPR / consent modals.
+        Executes on any page in ~30-50 ms.
         """
-        # Sprawdzamy najpopularniejsze identyfikatory OneTrust/Didomi/Klaro/Cookies lub przyciski zgód
         consent_selectors = [
             "#onetrust-accept-btn-handler",
             "#klaro-cookies-modal button",
             ".cookie-notice button",
+            "button:has-text('Accept all')",
+            "button:has-text('Accept')",
+            "button:has-text('Agree')",
+            "button:has-text('Allow all')",
+            "button:has-text('I agree')",
             "button:has-text('Zezwalam')",
             "button:has-text('Zgadzam się')",
             "button:has-text('Akceptuję')",
@@ -128,21 +132,22 @@ class AgentCore:
             loc = page.locator(sel).first
             try:
                 if await loc.is_visible(timeout=500):
-                    print(f"  [Auto-Dismiss] Wykryto modal zgód ({sel})! Klikam akceptację...")
+                    print(f"  [Auto-Dismiss] Consent modal detected ({sel})! Clicking accept...")
                     await loc.click(timeout=2000)
                     await page.wait_for_timeout(500)
                     return True
             except Exception:
                 pass
 
-        # Fallback przez ARIA Snapshot
+        # Fallback via ARIA Snapshot
         snapshot = await page.aria_snapshot()
         candidates = AriaElementParser.parse_snapshot(snapshot, max_candidates=25)
         res = self.router.evaluate_candidates("accept all cookies or close modal dialog", candidates)
         if res["confidence"] > 0.60 and res["target_ref"] != "NONE":
             best = res["ranked_candidates"][0]
-            if "cookie" in best["text"].lower() or "zgadz" in best["text"].lower() or "akcept" in best["text"].lower():
-                print(f"  [Auto-Dismiss] Wykryto przycisk cookies przez ARIA: [{best['role']}] \"{best['text']}\"")
+            text_lower = best["text"].lower()
+            if any(k in text_lower for k in ["cookie", "accept", "agree", "allow", "zgadz", "akcept"]):
+                print(f"  [Auto-Dismiss] Cookie button detected via ARIA: [{best['role']}] \"{best['text']}\"")
                 await page.get_by_role(best["role"], name=best["name"]).first.click()
                 await page.wait_for_timeout(1000)
                 return True
@@ -156,11 +161,11 @@ class AgentCore:
         fill_value: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Wykonuje pojedynczy krok autonomiczny na podstawie instrukcji w języku naturalnym.
+        Executes a single autonomous step based on natural language instruction.
         """
         t0 = time.perf_counter()
 
-        # 1. Pobranie czystego drzewa ARIA
+        # 1. Retrieve condensed ARIA tree
         snapshot_yaml = await page.aria_snapshot()
         candidates = AriaElementParser.parse_snapshot(
             snapshot_yaml,
@@ -168,11 +173,11 @@ class AgentCore:
             require_input_only=bool(fill_value)
         )
 
-        # Fallback jeśli require_input_only nie znalazło żadnego elementu
+        # Fallback if require_input_only did not match any element
         if not candidates and fill_value:
             candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=50, require_input_only=False)
 
-        # 2. Błyskawiczna ewaluacja DeBERTa-v3 na GPU
+        # 2. Fast DeBERTa-v3 evaluation on GPU
         decision = self.router.evaluate_candidates(intent=instruction, candidates=candidates)
         latency_ms = decision["latency_ms"]
 
@@ -187,7 +192,7 @@ class AgentCore:
         }
 
         if decision["should_escalate"] or decision["target_ref"] == "NONE":
-            step_info["error"] = "Niska pewność dopasowania elementu (wymagana eskalacja do Systemu 2)"
+            step_info["error"] = "Low confidence element match (escalation to System 2 required)"
             self.execution_log.append(step_info)
             return step_info
 
@@ -195,9 +200,9 @@ class AgentCore:
         role = best_cand["role"]
         name = best_cand["name"]
 
-        print(f"  -> Wybrano: [{role}] \"{name}\" (Pewność: {decision['confidence']*100:.1f}%, Czas: {latency_ms:.1f} ms)")
+        print(f"  -> Selected: [{role}] \"{name}\" (Confidence: {decision['confidence']*100:.1f}%, Latency: {latency_ms:.1f} ms)")
 
-        # 3. Wykonanie akcji przez natywny lokator Playwrighta z bezpiecznym timeoutem 5s
+        # 3. Execute action via native Playwright locator with safety timeout
         try:
             clean_name = re.sub(r'[\ue000-\uf8ff]', '', name).strip()
             name_pattern = re.compile(re.escape(clean_name), re.I) if clean_name else name
@@ -208,12 +213,11 @@ class AgentCore:
                     await locator.fill(fill_value, timeout=5000)
                     step_info["action_taken"] = f"fill('{fill_value}')"
                 else:
-                    # Wybrany element nie jest polem tekstowym a chciano wpisać tekst -> eskalacja
-                    step_info["error"] = f"Wybrano element typu [{role}], który nie przyjmuje tekstu fill_value='{fill_value}'"
+                    step_info["error"] = f"Selected element of role [{role}], which does not accept text input fill_value='{fill_value}'"
                     self.execution_log.append(step_info)
                     return step_info
             else:
-                # Akcja kliknięcia
+                # Click action
                 locator = page.get_by_role(role, name=name_pattern).first
                 try:
                     await locator.click(timeout=3500)

@@ -1,7 +1,7 @@
 """
 Cognitive Browser Microservice (System 1 + Playwright + DeBERTa-v3).
-Uniwersalny kontenerowy 'klocek' udostępniający lokalny silnik decyzyjny
-zarówno przez REST API, jak i protokół MCP dla agentów AI.
+Universal containerized microservice exposing the local decision engine
+via both REST API and Model Context Protocol (MCP) for AI agents.
 """
 
 import os
@@ -23,7 +23,7 @@ except ImportError:
     from deberta_router import DebertaDecisionRouter
     from agent_core import AgentCore, AriaElementParser
 
-# Konfiguracja środowiska
+# Environment configuration
 MODEL_NAME = os.getenv("MODEL_NAME", "cross-encoder/nli-deberta-v3-small")
 DEVICE = os.getenv(
     "DEVICE",
@@ -34,7 +34,7 @@ SESSION_DIR = os.getenv("SESSION_DIR", "/data/browser_sessions")
 
 os.makedirs(SESSION_DIR, exist_ok=True)
 
-# Globalne instancje
+# Global instances
 router_instance: Optional[DebertaDecisionRouter] = None
 agent_instance: Optional[AgentCore] = None
 playwright_manager = None
@@ -44,32 +44,32 @@ browser_instance: Optional[Browser] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global router_instance, agent_instance, playwright_manager, browser_instance
-    print(f"\n🚀 [CognitiveBrowser] Uruchamianie serwera na urządzeniu: {DEVICE.upper()}...")
-    
-    # Inicjalizacja modelu NLI
+    print(f"\n🚀 [CognitiveBrowser] Starting server on device: {DEVICE.upper()}...")
+
+    # Initialize NLI model
     router_instance = DebertaDecisionRouter(model_name=MODEL_NAME, device=DEVICE)
     agent_instance = AgentCore(model_name=MODEL_NAME, device=DEVICE)
-    
-    # Inicjalizacja Playwrighta
+
+    # Initialize Playwright
     playwright_manager = await async_playwright().start()
     browser_instance = await playwright_manager.chromium.launch(
         headless=True,
         args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
     )
-    print("✅ [CognitiveBrowser] Gotowy do przyjmowania zadań!\n")
+    print("✅ [CognitiveBrowser] Ready to accept tasks!\n")
     yield
-    
+
     # Cleanup
     if browser_instance:
         await browser_instance.close()
     if playwright_manager:
         await playwright_manager.stop()
-    print("🛑 [CognitiveBrowser] Serwer zatrzymany.")
+    print("🛑 [CognitiveBrowser] Server stopped.")
 
 
 app = FastAPI(
     title="Cognitive Browser Decision Microservice",
-    description="Ultraszybki, lokalny router System 1 do automatyzacji Playwrighta na GPU",
+    description="Ultra-fast local System 1 router for Playwright browser automation on GPU",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -83,11 +83,11 @@ app.add_middleware(
 )
 
 
-# Modele danych Pydantic
+# Pydantic schemas
 class EvaluateRequest(BaseModel):
-    intent: str = Field(..., description="Cel lub intencja użytkownika w języku naturalnym")
-    candidates: List[Dict[str, Any]] = Field(..., description="Lista kandydatów ARIA ze snapshotu")
-    confidence_threshold: float = Field(0.50, description="Próg pewności NLI")
+    intent: str = Field(..., description="Natural language intent or user goal")
+    candidates: List[Dict[str, Any]] = Field(..., description="List of ARIA snapshot candidate elements")
+    confidence_threshold: float = Field(0.50, description="NLI confidence threshold")
 
 
 class StepInstruction(BaseModel):
@@ -109,7 +109,7 @@ class SnapshotRequest(BaseModel):
     wait_time_ms: int = 1500
 
 
-# Endpointy API
+# API endpoints
 @app.get("/health")
 async def health_check():
     cuda_ok = torch.cuda.is_available()
@@ -128,10 +128,10 @@ async def health_check():
 
 @app.post("/v1/evaluate")
 async def evaluate_candidates(req: EvaluateRequest):
-    """Błyskawiczne wnioskowanie NLI (System 1) na przekazanych elementach."""
+    """Fast NLI inference (System 1) on provided candidate elements."""
     if not router_instance:
-        raise HTTPException(status_code=503, detail="Model NLI nie został załadowany")
-    
+        raise HTTPException(status_code=503, detail="NLI model is not initialized")
+
     t0 = time.perf_counter()
     decision = router_instance.evaluate_candidates(
         intent=req.intent,
@@ -144,23 +144,23 @@ async def evaluate_candidates(req: EvaluateRequest):
 
 @app.post("/v1/snapshot")
 async def take_aria_snapshot(req: SnapshotRequest):
-    """Pobiera stronę i zwraca czyste semantyczne drzewo ARIA oraz listę elementów."""
+    """Navigates to URL and returns clean semantic ARIA accessibility tree and candidates."""
     if not browser_instance:
-        raise HTTPException(status_code=503, detail="Przeglądarka nie jest gotowa")
-        
+        raise HTTPException(status_code=503, detail="Browser instance is not ready")
+
     t0 = time.perf_counter()
     page = await browser_instance.new_page()
     try:
         await page.goto(req.url, wait_until="domcontentloaded", timeout=req.wait_time_ms + 10000)
         await page.wait_for_timeout(req.wait_time_ms)
-        
-        # Auto-dismiss cookies jeśli obecne
+
+        # Auto-dismiss cookie overlays if present
         if agent_instance:
             await agent_instance.auto_dismiss_overlays(page)
-            
+
         snapshot_yaml = await page.aria_snapshot()
         candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=req.max_candidates)
-        
+
         return {
             "url": page.url,
             "title": await page.title(),
@@ -176,30 +176,30 @@ async def take_aria_snapshot(req: SnapshotRequest):
 @app.post("/v1/browse")
 async def execute_browse_task(req: BrowseTaskRequest):
     """
-    Wielokrokowe wykonanie zadania w przeglądarce przy użyciu System 1.
-    Obsługuje sekwencję kroków lub cel wysokopoziomowy.
+    Multi-step browser execution using System 1 decision engine.
+    Supports sequences of instructions or high-level goals.
     """
     if not browser_instance or not agent_instance:
-        raise HTTPException(status_code=503, detail="Silnik nie jest gotowy")
-        
+        raise HTTPException(status_code=503, detail="Browser or agent engine is not ready")
+
     t0 = time.perf_counter()
     page = await browser_instance.new_page()
     steps_log = []
-    
+
     try:
-        print(f"\n[BrowseTask] Otwieram: {req.url}")
+        print(f"\n[BrowseTask] Navigating to: {req.url}")
         await page.goto(req.url, wait_until="domcontentloaded", timeout=req.timeout_ms)
         await page.wait_for_timeout(1000)
-        
-        # Krok 0: Automatyczne zamykanie modali RODO/cookies
+
+        # Step 0: Auto-dismiss cookies/consent modals
         dismissed = await agent_instance.auto_dismiss_overlays(page)
         if dismissed:
             steps_log.append({"step": "auto_dismiss_cookies", "status": "dismissed"})
-            
-        # Wykonanie zdefiniowanych kroków
+
+        # Execute defined steps
         if req.steps:
             for s in req.steps:
-                print(f"  -> Krok: \"{s.instruction}\" (fill: {s.fill_value})")
+                print(f"  -> Step: \"{s.instruction}\" (fill: {s.fill_value})")
                 res = await agent_instance.execute_step(
                     page=page,
                     instruction=s.instruction,
@@ -207,10 +207,10 @@ async def execute_browse_task(req: BrowseTaskRequest):
                 )
                 steps_log.append(res)
                 if not res.get("executed"):
-                    print(f"  ⚠️ Zatrzymanie na kroku: {res.get('error')}")
+                    print(f"  ⚠️ Stopped at step: {res.get('error')}")
                     break
-                    
-        # Aktualny stan po wykonaniu
+
+        # Final snapshot after execution
         current_snapshot = await page.aria_snapshot()
         return {
             "status": "success",
@@ -233,26 +233,26 @@ async def execute_browse_task(req: BrowseTaskRequest):
         await page.close()
 
 
-# Narzędzia MCP w formacie JSON (kompatybilne ze specyfikacją Model Context Protocol)
+# MCP tools schema (compatible with Model Context Protocol specification)
 @app.get("/v1/mcp/tools")
 async def list_mcp_tools():
-    """Zwraca listę narzędzi MCP udostępnianych przez ten mikroserwis."""
+    """Returns the list of MCP tools exposed by this microservice."""
     return {
         "tools": [
             {
                 "name": "cognitive_browse",
-                "description": "Autonomiczna nawigacja po stronie WWW na bazie Systemu 1 (DeBERTa-v3) z zerowym zużyciem tokenów podczas klikania.",
+                "description": "Autonomous web browsing powered by System 1 (DeBERTa-v3) with 0 token consumption during interaction.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "url": {"type": "string", "description": "Adres strony WWW"},
+                        "url": {"type": "string", "description": "Target web page URL"},
                         "steps": {
                             "type": "array",
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "instruction": {"type": "string", "description": "Intencja/akcja do wykonania"},
-                                    "fill_value": {"type": "string", "description": "Opcjonalna wartość do wpisania w pole"}
+                                    "instruction": {"type": "string", "description": "User intent or action to execute"},
+                                    "fill_value": {"type": "string", "description": "Optional string value to fill into field"}
                                 },
                                 "required": ["instruction"]
                             }
@@ -263,11 +263,11 @@ async def list_mcp_tools():
             },
             {
                 "name": "get_aria_snapshot",
-                "description": "Pobiera czyste drzewo dostępności (ARIA YAML) strony WWW z pominięciem 98% szumu HTML.",
+                "description": "Extracts clean semantic ARIA accessibility tree from web page, removing ~98% of HTML noise.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "url": {"type": "string", "description": "Adres strony WWW"}
+                        "url": {"type": "string", "description": "Target web page URL"}
                     },
                     "required": ["url"]
                 }

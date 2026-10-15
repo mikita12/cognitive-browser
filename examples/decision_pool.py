@@ -1,6 +1,6 @@
 """
 Parallel Decision Worker Pool (System 1 Ensemble / Parallel Evaluator).
-Executes multiple concurrent decision questions across local fast models.
+Executes multiple concurrent decision queries across local fast models.
 """
 
 import asyncio
@@ -8,10 +8,11 @@ import time
 import httpx
 from typing import List, Dict, Any, Optional
 
+
 class DecisionWorker:
     """
-    Pojedynczy pracownik decyzyjny odpytujący lokalną Ollamę.
-    Wymusza schemat wyjścia (constrained decoding / JSON schema).
+    Individual decision worker querying local Ollama instance.
+    Enforces constrained decoding via strict JSON schema.
     """
     def __init__(self, model: str = "llama3.2:1b", host: str = "http://localhost:11434"):
         self.model = model
@@ -26,7 +27,7 @@ class DecisionWorker:
         valid_refs: List[str]
     ) -> Dict[str, Any]:
         """
-        Ocenia stan i mapuje intencję użytkownika na konkretny element i narzędzie Playwrighta.
+        Evaluates state and maps user intent to target element ref and Playwright action.
         """
         start_time = time.perf_counter()
 
@@ -42,8 +43,7 @@ class DecisionWorker:
             f"Select the exact target ref and tool action."
         )
 
-        # JSON schema z twardym enumem dostępnych refów!
-        # Dzięki temu model fizycznie nie może wymyślić nieistniejącego elementu (zero halucynacji selektora)
+        # JSON schema with strict enum of valid refs to prevent selector hallucinations
         allowed_refs = valid_refs + ["NONE"]
 
         json_schema = {
@@ -111,8 +111,8 @@ class DecisionWorker:
 
 class ParallelDecisionPool:
     """
-    Pula modeli decyzyjnych działających równolegle (Consensus / Voting / Multi-Question).
-    Pozwala na jednoczesne odpalenie kilku pytań lub kilku modeli w celu weryfikacji.
+    Pool of decision models operating concurrently (Consensus / Voting / Multi-Intent).
+    Allows executing multiple models or intents simultaneously.
     """
     def __init__(self, models: Optional[List[str]] = None):
         if not models:
@@ -127,7 +127,7 @@ class ParallelDecisionPool:
         valid_refs: List[str]
     ) -> List[Dict[str, Any]]:
         """
-        Odpytuje wszystkie modele w puli równolegle przez asyncio.gather.
+        Queries all models in the pool concurrently via asyncio.gather.
         """
         async with httpx.AsyncClient() as client:
             tasks = [
@@ -144,7 +144,7 @@ class ParallelDecisionPool:
         valid_refs: List[str]
     ) -> List[Dict[str, Any]]:
         """
-        Odpytuje jedno zadanie per intencję (np. sprawdzanie kliknięcia, cookies, powiadomień) równolegle.
+        Queries one task per intent concurrently.
         """
         async with httpx.AsyncClient() as client:
             worker = DecisionWorker(model=self.models[0])

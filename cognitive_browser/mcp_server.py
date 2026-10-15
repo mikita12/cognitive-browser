@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Cognitive Browser MCP Server (Model Context Protocol).
-Oficjalna integracja ze standardem MCP dla agentów AI (Antigravity, Claude Desktop, Cursor, Open WebUI).
-Udostępnia System 1 (DeBERTa-v3 na GPU) oraz Playwright ARIA Snapshot jako natywne narzędzia dla modeli językowych.
-Zawiera precyzyjną telemetrię czasu wykonania (GPU vs Sieć) z nakazem raportowania do użytkownika.
+Official MCP standard integration for AI agents (Claude Desktop, Cursor, Antigravity, Open WebUI).
+Exposes System 1 (DeBERTa-v3 on GPU) and Playwright ARIA Snapshots as native tools for language models.
+Includes precision execution telemetry (GPU vs Network) with mandatory user reporting.
 """
 
 import sys
@@ -26,7 +26,7 @@ except ImportError:
     from agent_core import AgentCore, AriaElementParser
     from agent_orchestrator import AgentOrchestrator
 
-# Inicjalizacja serwera MCP
+# Initialize MCP server
 mcp = MCPServer("cognitive-browser")
 
 _router: Optional[DebertaDecisionRouter] = None
@@ -66,16 +66,16 @@ async def get_services():
 @mcp.tool()
 async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Autonomicznie wykonuje wielokrokową nawigację po stronie WWW przy użyciu lokalnego Systemu 1 (DeBERTa-v3 na GPU)
-    oraz aktywnej asysty Systemu 2 (LLM Escalation Recovery) w razie napotkania niejednoznaczności lub modali.
-    Podejmuje decyzje w ułamku sekundy, automatycznie zamyka cookies i doprowadza zadanie do 100% ukończenia.
+    Autonomously executes multi-step web navigation using local System 1 (DeBERTa-v3 on GPU)
+    and active System 2 assistance (LLM Escalation Recovery) when encountering ambiguities or modals.
+    Makes split-second decisions, auto-dismisses cookie banners, and leads tasks to 100% completion.
 
-    WAŻNE DLA MODELU: Po zakończeniu działania TEGO NARZĘDZIA ZAWSZE podaj użytkownikowi blok 'telemetry' 
-    (całkowity czas w sekundach, czas wnioskowania GPU, tokeny Systemu 2 i zaoszczędzone tokeny).
+    IMPORTANT FOR AGENT: After executing THIS TOOL, ALWAYS present the user with the 'telemetry' block
+    (total duration in seconds, GPU inference time, System 2 tokens, and estimated tokens saved).
 
     Args:
-        url: Adres strony WWW do otwarcia
-        steps: Lista kroków, np. [{"instruction": "Stacja odjazdu", "fill_value": "Wrocław Główny"}, {"instruction": "Znajdź połączenie"}]
+        url: Target web page URL to open
+        steps: List of steps, e.g. [{"instruction": "Departure station", "fill_value": "Central Station"}, {"instruction": "Search connections"}]
     """
     router, agent, browser, orchestrator = await get_services()
     page = await browser.new_page()
@@ -106,17 +106,17 @@ async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, A
 @mcp.tool()
 async def get_aria_snapshot(url: str, max_candidates: int = 40) -> Dict[str, Any]:
     """
-    Pobiera czyste drzewo dostępności (ARIA Snapshot) strony internetowej.
-    Jest o 98% mniejsze niż surowy HTML (tylko to, co widzi użytkownik).
+    Extracts a clean, semantic Accessibility Tree (ARIA Snapshot) of a web page.
+    It is ~98% smaller than raw HTML (capturing strictly user-visible interactive elements).
 
-    WAŻNE DLA MODELU: Zawsze podaj użytkownikowi czas pobrania drzewa ARIA z bloku 'telemetry'.
+    IMPORTANT FOR AGENT: Always report the extraction time from the 'telemetry' block to the user.
 
     Args:
-        url: Adres strony WWW
-        max_candidates: Maksymalna liczba elementów interaktywnych
+        url: Target web page URL
+        max_candidates: Maximum number of interactive candidates to return
     """
     t_start = time.perf_counter()
-    router, agent, browser = await get_services()
+    router, agent, browser, _ = await get_services()
     page = await browser.new_page()
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=20000)
@@ -146,18 +146,18 @@ async def get_aria_snapshot(url: str, max_candidates: int = 40) -> Dict[str, Any
 @mcp.tool()
 async def smart_action(url: str, instruction: str, fill_value: Optional[str] = None) -> Dict[str, Any]:
     """
-    Wykonuje pojedynczą akcję (kliknięcie lub wpisanie tekstu) na stronie WWW,
-    dopasowując element semantycznie przez model DeBERTa-v3 na GPU w kilkadziesiąt milisekund.
+    Executes a single atomic action (click or fill) on a web page,
+    semantically resolving the target element via DeBERTa-v3 on GPU in tens of milliseconds.
 
-    WAŻNE DLA MODELU: Zawsze przedstaw użytkownikowi czas wykonania z bloku 'telemetry'.
+    IMPORTANT FOR AGENT: Always report execution latency from the 'telemetry' block to the user.
 
     Args:
-        url: Adres strony
-        instruction: Cel w języku naturalnym
-        fill_value: Opcjonalna wartość do wpisania w pole tekstowe
+        url: Web page URL
+        instruction: Natural language action goal
+        fill_value: Optional string value to type into an input field
     """
     t_start = time.perf_counter()
-    router, agent, browser = await get_services()
+    router, agent, browser, _ = await get_services()
     page = await browser.new_page()
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=20000)
