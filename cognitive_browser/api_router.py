@@ -6,11 +6,12 @@ Supports true decision/discriminative models over API:
 3. Fast LLM fallback (OpenAI / Groq / OpenRouter)
 """
 
+import json
 import os
 import time
-import json
+from typing import Any, Dict, List, Optional
+
 import requests
-from typing import List, Dict, Any, Optional
 
 
 class ApiDecisionRouter:
@@ -20,12 +21,12 @@ class ApiDecisionRouter:
     and fallback fast generative models.
     """
 
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        provider: Optional[str] = None,
-        model: Optional[str] = None
-    ):
+    def __init__(self, api_key: Optional[str] = None, provider: Optional[str] = None, model: Optional[str] = None):
+        self.provider: str
+        self.api_key: Optional[str]
+        self.model: str
+        self.base_url: str
+
         # 1. Priority: DeBERTa model hosted on Hugging Face Inference API
         if os.getenv("HF_TOKEN") or provider == "huggingface":
             self.provider = "huggingface"
@@ -62,14 +63,11 @@ class ApiDecisionRouter:
             self.provider = "openai"
             self.api_key = api_key or os.getenv("ROUTER_API_KEY", "")
             self.base_url = os.getenv("ROUTER_BASE_URL", "https://api.openai.com/v1/chat/completions")
-            self.model = model or os.getenv("ROUTER_MODEL", "gpt-4o-mini")
+            self.model = model or os.getenv("ROUTER_MODEL") or "gpt-4o-mini"
             print(f"[ApiDecisionRouter] Active default provider: {self.provider} ({self.model})")
 
     def evaluate_candidates(
-        self,
-        intent: str,
-        candidates: List[Dict[str, Any]],
-        confidence_threshold: float = 0.50
+        self, intent: str, candidates: List[Dict[str, Any]], confidence_threshold: float = 0.50
     ) -> Dict[str, Any]:
         if not candidates:
             return {
@@ -78,7 +76,7 @@ class ApiDecisionRouter:
                 "confidence": 0.0,
                 "should_escalate": True,
                 "latency_ms": 0.0,
-                "ranked_candidates": []
+                "ranked_candidates": [],
             }
 
         if self.provider == "huggingface":
@@ -88,7 +86,9 @@ class ApiDecisionRouter:
         else:
             return self._evaluate_generic_llm(intent, candidates, confidence_threshold)
 
-    def _evaluate_huggingface_nli(self, intent: str, candidates: List[Dict[str, Any]], threshold: float) -> Dict[str, Any]:
+    def _evaluate_huggingface_nli(
+        self, intent: str, candidates: List[Dict[str, Any]], threshold: float
+    ) -> Dict[str, Any]:
         """
         Native NLI inference on Hugging Face Inference API (same DeBERTa-v3 architecture).
         """
@@ -99,7 +99,9 @@ class ApiDecisionRouter:
         hypothesis = f"This element represents, opens, or is used to {intent}."
         pairs = []
         for c in candidates[:40]:
-            premise = f"Interactive web element: role: {c.get('role')}, name: '{c.get('name')}', text: '{c.get('text')}'."
+            premise = (
+                f"Interactive web element: role: {c.get('role')}, name: '{c.get('name')}', text: '{c.get('text')}'."
+            )
             pairs.append({"text": premise, "text_pair": hypothesis})
 
         try:
@@ -107,15 +109,17 @@ class ApiDecisionRouter:
             data = resp.json()
 
             # Hugging Face NLI returns label scores for each pair
-            scored = []
+            scored: List[Dict[str, Any]] = []
             for idx, res_item in enumerate(data):
                 cand = candidates[idx]
-                entail_score = next((x["score"] for x in res_item if "entail" in x.get("label", "").lower()), 0.0)
+                entail_score = float(
+                    next((x["score"] for x in res_item if "entail" in x.get("label", "").lower()), 0.0)
+                )
                 scored.append({"cand": cand, "score": entail_score})
 
-            scored.sort(key=lambda x: x["score"], reverse=True)
+            scored.sort(key=lambda x: float(x["score"]), reverse=True)
             best = scored[0]["cand"]
-            confidence = round(scored[0]["score"], 4)
+            confidence = round(float(scored[0]["score"]), 4)
             latency_ms = round((time.perf_counter() - t0) * 1000, 2)
 
             action = "fill" if best["role"] in ["textbox", "combobox", "searchbox"] else "click"
@@ -127,27 +131,26 @@ class ApiDecisionRouter:
                 "confidence": confidence,
                 "should_escalate": should_escalate,
                 "latency_ms": latency_ms,
-                "ranked_candidates": [s["cand"] for s in scored]
+                "ranked_candidates": [s["cand"] for s in scored],
             }
         except Exception as e:
             return self._fallback_error(candidates, str(e), time.perf_counter() - t0)
 
-    def _evaluate_cohere_rerank(self, intent: str, candidates: List[Dict[str, Any]], threshold: float) -> Dict[str, Any]:
+    def _evaluate_cohere_rerank(
+        self, intent: str, candidates: List[Dict[str, Any]], threshold: float
+    ) -> Dict[str, Any]:
         """
         Discriminative inference via Cohere Rerank API (Cross-Encoder).
         """
         t0 = time.perf_counter()
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         docs = [f"role: {c['role']}, name: {c['name']}, info: {c.get('text', '')}" for c in candidates[:50]]
 
         payload = {
             "model": self.model,
             "query": f"Find button or input to {intent}",
             "documents": docs,
-            "top_n": len(docs)
+            "top_n": len(docs),
         }
 
         try:
@@ -174,7 +177,7 @@ class ApiDecisionRouter:
                 "confidence": confidence,
                 "should_escalate": should_escalate,
                 "latency_ms": latency_ms,
-                "ranked_candidates": ranked
+                "ranked_candidates": ranked,
             }
         except Exception as e:
             return self._fallback_error(candidates, str(e), time.perf_counter() - t0)
@@ -184,7 +187,7 @@ class ApiDecisionRouter:
         Fallback fast JSON query to OpenAI / Groq.
         """
         t0 = time.perf_counter()
-        cands_snippet = "\n".join([f"- {c['ref']}: [{c['role']}] \"{c['name']}\"" for c in candidates[:40]])
+        cands_snippet = "\n".join([f'- {c["ref"]}: [{c["role"]}] "{c["name"]}"' for c in candidates[:40]])
 
         prompt = f"""You are a fast reflex decision router for a browser agent.
 Goal: "{intent}".
@@ -198,7 +201,7 @@ Output JSON ONLY: {{"chosen_ref": "aria-X", "confidence": 0.95}}
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"},
-            "temperature": 0.0
+            "temperature": 0.0,
         }
         try:
             resp = requests.post(self.base_url, headers=headers, json=payload, timeout=6)
@@ -215,7 +218,7 @@ Output JSON ONLY: {{"chosen_ref": "aria-X", "confidence": 0.95}}
                 "confidence": confidence,
                 "should_escalate": confidence < threshold or chosen_ref == "NONE",
                 "latency_ms": round((time.perf_counter() - t0) * 1000, 2),
-                "ranked_candidates": [best] + [c for c in candidates if c["ref"] != chosen_ref]
+                "ranked_candidates": [best] + [c for c in candidates if c["ref"] != chosen_ref],
             }
         except Exception as e:
             return self._fallback_error(candidates, str(e), time.perf_counter() - t0)
@@ -228,5 +231,5 @@ Output JSON ONLY: {{"chosen_ref": "aria-X", "confidence": 0.95}}
             "should_escalate": True,
             "latency_ms": round(elapsed_s * 1000, 2),
             "ranked_candidates": candidates,
-            "error": error_msg
+            "error": error_msg,
         }

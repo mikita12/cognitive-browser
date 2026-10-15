@@ -4,7 +4,6 @@ Supports environment variables and programmatic overrides.
 """
 
 import os
-from typing import Optional, List
 
 
 def get_confidence_threshold(default: float = 0.50) -> float:

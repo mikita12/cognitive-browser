@@ -1,7 +1,9 @@
 """
 Test AriaElementParser parsing functionality.
 """
+
 import unittest
+
 from cognitive_browser import AriaElementParser
 
 
@@ -31,23 +33,23 @@ class TestAriaElementParser(unittest.TestCase):
         # Check searchbox parsed
         searchbox = next((c for c in candidates if c["role"] == "searchbox"), None)
         self.assertIsNotNone(searchbox)
+        assert searchbox is not None
         self.assertEqual(searchbox["name"], "What are you looking for?")
 
         # Check button parsed
         button = next((c for c in candidates if c["role"] == "button"), None)
         self.assertIsNotNone(button)
+        assert button is not None
         self.assertEqual(button["name"], "Search")
 
         # Check link with URL parsed
         login_link = next((c for c in candidates if c["name"] == "Sign In"), None)
         self.assertIsNotNone(login_link)
+        assert login_link is not None
         self.assertEqual(login_link["url"], "/account/login")
 
     def test_require_input_only_filter(self):
-        candidates = AriaElementParser.parse_snapshot(
-            self.sample_snapshot,
-            require_input_only=True
-        )
+        candidates = AriaElementParser.parse_snapshot(self.sample_snapshot, require_input_only=True)
         roles = {c["role"] for c in candidates}
         # Only input roles should remain
         for role in roles:

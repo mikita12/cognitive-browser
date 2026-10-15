@@ -5,14 +5,12 @@ Zero generative LLM tokens consumed. Sub-50ms inference on modern hardware.
 """
 
 import time
-import torch
-from typing import List, Dict, Any, Optional
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from typing import Any, Dict, List, Optional
 
-try:
-    from .config import get_confidence_threshold
-except ImportError:
-    from config import get_confidence_threshold
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+from .config import get_confidence_threshold
 
 
 class DebertaDecisionRouter:
@@ -46,7 +44,9 @@ class DebertaDecisionRouter:
 
     def _warmup(self):
         with torch.no_grad():
-            dummy = self.tokenizer(["Web element: button"], ["This element is used to submit."], return_tensors="pt").to(self.device)
+            dummy = self.tokenizer(
+                ["Web element: button"], ["This element is used to submit."], return_tensors="pt"
+            ).to(self.device)
             _ = self.model(**dummy)
         if self.device == "cuda":
             torch.cuda.synchronize()
@@ -54,10 +54,7 @@ class DebertaDecisionRouter:
             torch.mps.synchronize()
 
     def evaluate_candidates(
-        self,
-        intent: str,
-        candidates: List[Dict[str, Any]],
-        confidence_threshold: Optional[float] = None
+        self, intent: str, candidates: List[Dict[str, Any]], confidence_threshold: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Evaluates all candidate elements in parallel using NLI (entailment vs contradiction).
@@ -73,7 +70,7 @@ class DebertaDecisionRouter:
                 "confidence": 0.0,
                 "should_escalate": True,
                 "latency_ms": 0.0,
-                "ranked_candidates": []
+                "ranked_candidates": [],
             }
 
         start_time = time.perf_counter()
@@ -111,22 +108,24 @@ class DebertaDecisionRouter:
 
         latency_ms = (time.perf_counter() - start_time) * 1000
 
-        scored_candidates = []
+        scored_candidates: List[Dict[str, Any]] = []
         for i, c in enumerate(candidates):
-            score = binary_probs[i].item()
-            scored_candidates.append({
-                "ref": c.get("ref"),
-                "tag": c.get("tag"),
-                "text": c.get("text"),
-                "role": c.get("role"),
-                "type": c.get("type"),
-                "name": c.get("name"),
-                "confidence_score": round(score, 4)
-            })
+            score = float(binary_probs[i].item())
+            scored_candidates.append(
+                {
+                    "ref": c.get("ref", "NONE"),
+                    "tag": c.get("tag"),
+                    "text": c.get("text"),
+                    "role": c.get("role"),
+                    "type": c.get("type"),
+                    "name": c.get("name"),
+                    "confidence_score": float(round(score, 4)),
+                }
+            )
 
-        scored_candidates.sort(key=lambda x: x["confidence_score"], reverse=True)
+        scored_candidates.sort(key=lambda x: float(x.get("confidence_score") or 0.0), reverse=True)
         best = scored_candidates[0]
-        best_score = best["confidence_score"]
+        best_score = float(best["confidence_score"])
 
         # Determine Playwright action
         if best_score < confidence_threshold:
@@ -135,8 +134,13 @@ class DebertaDecisionRouter:
             target_ref = "NONE"
         else:
             should_escalate = False
-            target_ref = best["ref"]
-            if best["tag"] in ["input", "textarea"] and best.get("type") not in ["submit", "button", "checkbox", "radio"]:
+            target_ref = str(best["ref"])
+            if best["tag"] in ["input", "textarea"] and best.get("type") not in [
+                "submit",
+                "button",
+                "checkbox",
+                "radio",
+            ]:
                 action = "fill"
             elif best.get("type") == "checkbox":
                 action = "check"
@@ -151,5 +155,5 @@ class DebertaDecisionRouter:
             "confidence": best_score,
             "should_escalate": should_escalate,
             "latency_ms": round(latency_ms, 2),
-            "ranked_candidates": scored_candidates
+            "ranked_candidates": scored_candidates,
         }

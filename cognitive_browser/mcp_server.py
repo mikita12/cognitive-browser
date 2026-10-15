@@ -6,32 +6,24 @@ Exposes Reflex Core (DeBERTa-v3 on GPU) and Playwright ARIA Snapshots as native 
 Includes precision execution telemetry (GPU vs Network) with mandatory user reporting.
 """
 
-import sys
 import os
+import sys
 import time
-import asyncio
+from typing import Any, Dict, List, Optional
+
 import torch
-from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
-
 from mcp.server.mcpserver import MCPServer
-from playwright.async_api import async_playwright, Browser
+from playwright.async_api import Browser, async_playwright
 
-try:
-    from .deberta_router import DebertaDecisionRouter
-    from .agent_core import AgentCore, AriaElementParser
-    from .agent_orchestrator import AgentOrchestrator
-    from .security import validate_url
-except ImportError:
-    from deberta_router import DebertaDecisionRouter
-    from agent_core import AgentCore, AriaElementParser
-    from agent_orchestrator import AgentOrchestrator
-    from security import validate_url
+from .agent_core import AgentCore, AriaElementParser
+from .agent_orchestrator import AgentOrchestrator
+from .router_factory import get_decision_router
+from .security import validate_url
 
 # Initialize MCP server
 mcp = MCPServer("cognitive-browser")
 
-_router: Optional[DebertaDecisionRouter] = None
+_router: Optional[Any] = None
 _agent: Optional[AgentCore] = None
 _orchestrator: Optional[AgentOrchestrator] = None
 _playwright = None
@@ -41,26 +33,21 @@ _browser: Optional[Browser] = None
 async def get_services():
     global _router, _agent, _orchestrator, _playwright, _browser
     if _router is None:
-        if os.environ.get("DEVICE"):
-            device = os.environ.get("DEVICE")
-        elif torch.cuda.is_available():
-            device = "cuda"
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            device = "mps"
-        else:
-            device = "cpu"
+        device = os.environ.get("DEVICE")
+        if not device:
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
 
-        try:
-            from .router_factory import get_decision_router
-        except ImportError:
-            from router_factory import get_decision_router
         _router = get_decision_router(device=device)
         _agent = AgentCore(device=device, router=_router)
         _orchestrator = AgentOrchestrator(device=device, router=_router)
         _playwright = await async_playwright().start()
         _browser = await _playwright.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+            headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
         )
     return _router, _agent, _browser, _orchestrator
 
@@ -100,10 +87,10 @@ async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, A
                 "cortex_llm_tokens": res.get("cortex_tokens", res.get("system2_tokens", 0)),
                 "system1_gpu_inference_ms": res.get("system1_gpu_ms", 0.0),
                 "system2_llm_tokens": res.get("system2_tokens", 0),
-                "steps_completed": res.get("steps_executed", 0)
+                "steps_completed": res.get("steps_executed", 0),
             },
             "steps_log": res.get("steps_log", []),
-            "condensed_aria_snapshot": final_snapshot[:2000]
+            "condensed_aria_snapshot": final_snapshot[:2000],
         }
     finally:
         await page.close()
@@ -141,10 +128,10 @@ async def get_aria_snapshot(url: str, max_candidates: int = 40) -> Dict[str, Any
             "telemetry": {
                 "total_execution_seconds": round(t_total, 2),
                 "total_execution_ms": round(t_total * 1000, 1),
-                "tokens_saved_vs_raw_html": "~98.5%"
+                "tokens_saved_vs_raw_html": "~98.5%",
             },
             "interactive_elements": candidates,
-            "raw_aria_tree": snapshot_yaml[:3500]
+            "raw_aria_tree": snapshot_yaml[:3500],
         }
     finally:
         await page.close()
@@ -183,21 +170,21 @@ async def smart_action(url: str, instruction: str, fill_value: Optional[str] = N
                 "reflex_gpu_inference_ms": res.get("latency_ms", 0.0),
                 "tokens_used_by_reflex": 0,
                 "system1_gpu_inference_ms": res.get("latency_ms", 0.0),
-                "tokens_used_by_system1": 0
+                "tokens_used_by_system1": 0,
             },
             "action_result": res,
             "current_url": page.url,
-            "current_title": await page.title()
+            "current_title": await page.title(),
         }
     finally:
         await page.close()
 
 
 def main():
-    transport = "stdio"
     if "--sse" in sys.argv:
-        transport = "sse"
-    mcp.run(transport=transport)
+        mcp.run(transport="sse")
+    else:
+        mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":

@@ -4,41 +4,42 @@ Navigates web applications using official Accessibility Trees (ARIA snapshots)
 and DeBERTa-v3 discriminative decision routing in sub-50ms with 0 LLM tokens.
 """
 
-import asyncio
-import time
 import re
-from typing import List, Dict, Any, Optional
-from playwright.async_api import Page, async_playwright
-try:
-    from .deberta_router import DebertaDecisionRouter
-    from .security import mask_sensitive_value
-    from .config import get_confidence_threshold
-except ImportError:
-    from deberta_router import DebertaDecisionRouter
-    from security import mask_sensitive_value
-    from config import get_confidence_threshold
+import time
+from typing import Any, Dict, List, Optional
+
+from playwright.async_api import Page
+
+from .config import get_confidence_threshold
+from .security import mask_sensitive_value
 
 
 class AriaElementParser:
     """Parses official page.aria_snapshot() YAML format into semantic candidate objects."""
 
     INTERACTIVE_ROLES = {
-        "button", "link", "combobox", "textbox", "searchbox",
-        "checkbox", "radio", "tab", "menuitem", "dialog", "alertdialog"
+        "button",
+        "link",
+        "combobox",
+        "textbox",
+        "searchbox",
+        "checkbox",
+        "radio",
+        "tab",
+        "menuitem",
+        "dialog",
+        "alertdialog",
     }
 
     PATTERN = re.compile(r'^\s*-\s*([a-zA-Z0-9_-]+)(?:\s+"([^"]*)")?(?::\s*(.*))?$')
 
     @classmethod
     def parse_snapshot(
-        cls,
-        snapshot_yaml: str,
-        max_candidates: int = 60,
-        require_input_only: bool = False
+        cls, snapshot_yaml: str, max_candidates: int = 60, require_input_only: bool = False
     ) -> List[Dict[str, Any]]:
-        candidates = []
+        candidates: List[Dict[str, Any]] = []
         lines = snapshot_yaml.splitlines()
-        for idx, line in enumerate(lines):
+        for line in lines:
             clean = line.strip()
             if not clean.startswith("-"):
                 continue
@@ -72,14 +73,16 @@ class AriaElementParser:
                 continue
 
             if role in cls.INTERACTIVE_ROLES and label:
-                candidates.append({
-                    "ref": f"aria-{len(candidates)}",
-                    "role": role,
-                    "tag": role,
-                    "name": label[:120],
-                    "text": label[:120],
-                    "raw": clean
-                })
+                candidates.append(
+                    {
+                        "ref": f"aria-{len(candidates)}",
+                        "role": role,
+                        "tag": role,
+                        "name": label[:120],
+                        "text": label[:120],
+                        "raw": clean,
+                    }
+                )
 
             if len(candidates) >= max_candidates:
                 break
@@ -98,18 +101,18 @@ class AgentCore:
         model_name: str = "cross-encoder/nli-deberta-v3-small",
         device: str = "cuda",
         router: Optional[Any] = None,
-        confidence_threshold: Optional[float] = None
+        confidence_threshold: Optional[float] = None,
     ):
         if router is not None:
             self.router = router
         else:
-            try:
-                from .router_factory import get_decision_router
-            except ImportError:
-                from router_factory import get_decision_router
+            from .router_factory import get_decision_router
+
             self.router = get_decision_router(device=device)
-        self.confidence_threshold = confidence_threshold if confidence_threshold is not None else get_confidence_threshold()
-        self.execution_log = []
+        self.confidence_threshold = (
+            confidence_threshold if confidence_threshold is not None else get_confidence_threshold()
+        )
+        self.execution_log: List[Dict[str, Any]] = []
 
     async def auto_dismiss_overlays(self, page: Page) -> bool:
         """
@@ -131,7 +134,7 @@ class AgentCore:
             "button:has-text('Zaakceptuj')",
             "button[id*='accept']",
             "button[id*='consent']",
-            "button[data-testid*='accept']"
+            "button[data-testid*='accept']",
         ]
 
         for sel in consent_selectors:
@@ -153,19 +156,14 @@ class AgentCore:
             best = res["ranked_candidates"][0]
             text_lower = best["text"].lower()
             if any(k in text_lower for k in ["cookie", "accept", "agree", "allow", "zgadz", "akcept"]):
-                print(f"  [Auto-Dismiss] Cookie button detected via ARIA: [{best['role']}] \"{best['text']}\"")
+                print(f'  [Auto-Dismiss] Cookie button detected via ARIA: [{best["role"]}] "{best["text"]}"')
                 await page.get_by_role(best["role"], name=best["name"]).first.click()
                 await page.wait_for_timeout(1000)
                 return True
 
         return False
 
-    async def execute_step(
-        self,
-        page: Page,
-        instruction: str,
-        fill_value: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def execute_step(self, page: Page, instruction: str, fill_value: Optional[str] = None) -> Dict[str, Any]:
         """
         Executes a single autonomous step based on natural language instruction.
         """
@@ -174,9 +172,7 @@ class AgentCore:
         # 1. Retrieve condensed ARIA tree
         snapshot_yaml = await page.aria_snapshot()
         candidates = AriaElementParser.parse_snapshot(
-            snapshot_yaml,
-            max_candidates=50,
-            require_input_only=bool(fill_value)
+            snapshot_yaml, max_candidates=50, require_input_only=bool(fill_value)
         )
 
         # Fallback if require_input_only did not match any element
@@ -185,9 +181,7 @@ class AgentCore:
 
         # 2. Fast DeBERTa-v3 evaluation on GPU
         decision = self.router.evaluate_candidates(
-            intent=instruction,
-            candidates=candidates,
-            confidence_threshold=self.confidence_threshold
+            intent=instruction, candidates=candidates, confidence_threshold=self.confidence_threshold
         )
         latency_ms = decision["latency_ms"]
 
@@ -198,7 +192,7 @@ class AgentCore:
             "target_ref": decision["target_ref"],
             "action": decision["tool_action"],
             "executed": False,
-            "error": None
+            "error": None,
         }
 
         if decision["should_escalate"] or decision["target_ref"] == "NONE":
@@ -210,11 +204,13 @@ class AgentCore:
         role = best_cand["role"]
         name = best_cand["name"]
 
-        print(f"  -> Selected: [{role}] \"{name}\" (Confidence: {decision['confidence']*100:.1f}%, Latency: {latency_ms:.1f} ms)")
+        print(
+            f'  -> Selected: [{role}] "{name}" (Confidence: {decision["confidence"] * 100:.1f}%, Latency: {latency_ms:.1f} ms)'
+        )
 
         # 3. Execute action via native Playwright locator with safety timeout
         try:
-            clean_name = re.sub(r'[\ue000-\uf8ff]', '', name).strip()
+            clean_name = re.sub(r"[\ue000-\uf8ff]", "", name).strip()
             name_pattern = re.compile(re.escape(clean_name), re.I) if clean_name else name
 
             if fill_value:
@@ -225,7 +221,9 @@ class AgentCore:
                     step_info["action_taken"] = f"fill('{masked_val}')"
                 else:
                     masked_val = mask_sensitive_value(fill_value, instruction=instruction)
-                    step_info["error"] = f"Selected element of role [{role}], which does not accept text input fill_value='{masked_val}'"
+                    step_info["error"] = (
+                        f"Selected element of role [{role}], which does not accept text input fill_value='{masked_val}'"
+                    )
                     self.execution_log.append(step_info)
                     return step_info
             else:

@@ -35,8 +35,17 @@ downloads/
 screenshots/
 *.log
 
+# Testing & Tooling caches
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+benchmarks/*_results.json
+
 # Internal & Pre-Release Checklist (User requested to keep hidden from git)
 PRE_RELEASE_CHECKLIST.md
 RELEASE_NOTES_INTERNAL.md
 .env
 .env.local
+
