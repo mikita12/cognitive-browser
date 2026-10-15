@@ -25,6 +25,15 @@
     "baseline_tokens": {
       "mean": 372073.0,
       "stdev": 0.0
+    },
+    "reflex_step_latency_ms": {
+      "metric": "Reflex Core per-step inference latency (CUDA)",
+      "sample_size": 32,
+      "median_ms": 24.9,
+      "p95_ms": 64.6,
+      "mean_ms": 28.4,
+      "min_ms": 5.6,
+      "max_ms": 95.5
     }
   },
   "runs": [
@@ -45,7 +54,30 @@
           "system2_tokens": 0,
           "total_tokens": 212,
           "steps_executed": 3,
-          "final_url": "https://koleo.pl/rozklad-pkp/wroclaw-glowny/poznan-glowny/15-10-2026_14:45"
+          "final_url": "https://koleo.pl/rozklad-pkp/wroclaw-glowny/poznan-glowny/15-10-2026_14:45",
+          "steps_log": [
+            {
+              "role": "combobox",
+              "name": "Stacja odjazdu",
+              "confidence": 0.995,
+              "latency_ms": 29.0,
+              "executed": true
+            },
+            {
+              "role": "combobox",
+              "name": "Stacja przyjazdu",
+              "confidence": 0.996,
+              "latency_ms": 95.5,
+              "executed": true
+            },
+            {
+              "role": "button",
+              "name": " Znajdź połączenie",
+              "confidence": 0.993,
+              "latency_ms": 64.6,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -73,7 +105,23 @@
           "system2_tokens": 0,
           "total_tokens": 171,
           "steps_executed": 2,
-          "final_url": "https://inpost.pl/cenniki#individual-customer?manager-paczek-paczkomat"
+          "final_url": "https://inpost.pl/cenniki#individual-customer?manager-paczek-paczkomat",
+          "steps_log": [
+            {
+              "role": "link",
+              "name": "Cennik",
+              "confidence": 0.997,
+              "latency_ms": 61.9,
+              "executed": true
+            },
+            {
+              "role": "tab",
+              "name": "Manager Paczek - Paczkomat",
+              "confidence": 0.983,
+              "latency_ms": 43.8,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -101,7 +149,23 @@
           "system2_tokens": 0,
           "total_tokens": 167,
           "steps_executed": 2,
-          "final_url": "http://books.toscrape.com/catalogue/category/books/food-and-drink_33/index.html"
+          "final_url": "http://books.toscrape.com/catalogue/category/books/food-and-drink_33/index.html",
+          "steps_log": [
+            {
+              "role": "link",
+              "name": "Travel",
+              "confidence": 0.997,
+              "latency_ms": 19.2,
+              "executed": true
+            },
+            {
+              "role": "link",
+              "name": "Food and Drink",
+              "confidence": 0.598,
+              "latency_ms": 20.5,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -129,7 +193,44 @@
           "system2_tokens": 0,
           "total_tokens": 216,
           "steps_executed": 5,
-          "final_url": "https://httpbin.org/forms/post"
+          "final_url": "https://httpbin.org/forms/post",
+          "steps_log": [
+            {
+              "role": "textbox",
+              "name": "Customer name:",
+              "confidence": 0.985,
+              "latency_ms": 5.8,
+              "executed": true
+            },
+            {
+              "role": "textbox",
+              "name": "Telephone:",
+              "confidence": 0.995,
+              "latency_ms": 6.3,
+              "executed": true
+            },
+            {
+              "role": "textbox",
+              "name": "E-mail address:",
+              "confidence": 0.99,
+              "latency_ms": 6.5,
+              "executed": true
+            },
+            {
+              "role": "radio",
+              "name": "Large",
+              "confidence": 0.996,
+              "latency_ms": 7.6,
+              "executed": true
+            },
+            {
+              "role": "checkbox",
+              "name": "Bacon",
+              "confidence": 0.992,
+              "latency_ms": 6.9,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -157,7 +258,23 @@
           "system2_tokens": 0,
           "total_tokens": 177,
           "steps_executed": 2,
-          "final_url": "https://www.olx.pl/oferty/q-PlayStation-5/"
+          "final_url": "https://www.olx.pl/oferty/q-PlayStation-5/",
+          "steps_log": [
+            {
+              "role": "combobox",
+              "name": "Znajdź coś dla siebie",
+              "confidence": 0.762,
+              "latency_ms": 5.6,
+              "executed": true
+            },
+            {
+              "role": "button",
+              "name": "Szukaj",
+              "confidence": 0.992,
+              "latency_ms": 39.4,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -185,7 +302,16 @@
           "system2_tokens": 285,
           "total_tokens": 450,
           "steps_executed": 2,
-          "final_url": "https://news.ycombinator.com/vote?id=50093568&how=up&goto=news"
+          "final_url": "https://news.ycombinator.com/vote?id=50093568&how=up&goto=news",
+          "steps_log": [
+            {
+              "role": "link",
+              "name": "upvote",
+              "confidence": 0.998,
+              "latency_ms": 25.8,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -213,7 +339,23 @@
           "system2_tokens": 0,
           "total_tokens": 169,
           "steps_executed": 2,
-          "final_url": "https://github.com/trending"
+          "final_url": "https://github.com/trending",
+          "steps_log": [
+            {
+              "role": "button",
+              "name": "Spoken Language: Any",
+              "confidence": 0.997,
+              "latency_ms": 25.9,
+              "executed": true
+            },
+            {
+              "role": "link",
+              "name": "Developers",
+              "confidence": 0.998,
+              "latency_ms": 25.8,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -241,7 +383,23 @@
           "system2_tokens": 0,
           "total_tokens": 180,
           "steps_executed": 2,
-          "final_url": "https://www.morele.net/wyszukiwarka/?q=Mechanical+keyboard&d=0"
+          "final_url": "https://www.morele.net/wyszukiwarka/?q=Mechanical+keyboard&d=0",
+          "steps_log": [
+            {
+              "role": "searchbox",
+              "name": "wyszukiwarka",
+              "confidence": 0.988,
+              "latency_ms": 6.1,
+              "executed": true
+            },
+            {
+              "role": "button",
+              "name": "szukaj",
+              "confidence": 0.987,
+              "latency_ms": 24.6,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -269,7 +427,23 @@
           "system2_tokens": 0,
           "total_tokens": 164,
           "steps_executed": 2,
-          "final_url": "http://quotes.toscrape.com/tag/humor/page/2/"
+          "final_url": "http://quotes.toscrape.com/tag/humor/page/2/",
+          "steps_log": [
+            {
+              "role": "link",
+              "name": "humor",
+              "confidence": 0.995,
+              "latency_ms": 25.1,
+              "executed": true
+            },
+            {
+              "role": "link",
+              "name": "Next",
+              "confidence": 0.9940000000000001,
+              "latency_ms": 20.1,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -297,7 +471,23 @@
           "system2_tokens": 0,
           "total_tokens": 171,
           "steps_executed": 2,
-          "final_url": "https://expresspizza.pl/pizzeria-zielona-gora"
+          "final_url": "https://expresspizza.pl/pizzeria-zielona-gora",
+          "steps_log": [
+            {
+              "role": "button",
+              "name": "DOSTAWA DO DOMU",
+              "confidence": 0.993,
+              "latency_ms": 32.6,
+              "executed": true
+            },
+            {
+              "role": "link",
+              "name": "Zielona Góra, Dworcowa 20B 883 26 26 26",
+              "confidence": 0.9940000000000001,
+              "latency_ms": 32.6,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -325,7 +515,23 @@
           "system2_tokens": 0,
           "total_tokens": 168,
           "steps_executed": 2,
-          "final_url": "https://mania.pizza/polityka-plikow-cookies-eu/"
+          "final_url": "https://mania.pizza/polityka-plikow-cookies-eu/",
+          "steps_log": [
+            {
+              "role": "link",
+              "name": "Zamów ",
+              "confidence": 0.9990000000000001,
+              "latency_ms": 19.1,
+              "executed": true
+            },
+            {
+              "role": "link",
+              "name": "Polityka plików cookies",
+              "confidence": 0.9490000000000001,
+              "latency_ms": 20.3,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -353,7 +559,23 @@
           "system2_tokens": 0,
           "total_tokens": 164,
           "steps_executed": 2,
-          "final_url": "https://www.pizzu.pl/#menu-lunch"
+          "final_url": "https://www.pizzu.pl/#menu-lunch",
+          "steps_log": [
+            {
+              "role": "link",
+              "name": "LUNCH",
+              "confidence": 0.988,
+              "latency_ms": 58.9,
+              "executed": true
+            },
+            {
+              "role": "link",
+              "name": "LUNCH",
+              "confidence": 0.997,
+              "latency_ms": 60.7,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -381,7 +603,30 @@
           "system2_tokens": 0,
           "total_tokens": 199,
           "steps_executed": 3,
-          "final_url": "https://www.e-podroznik.pl/zamowienia"
+          "final_url": "https://www.e-podroznik.pl/zamowienia",
+          "steps_log": [
+            {
+              "role": "textbox",
+              "name": " Z",
+              "confidence": 0.993,
+              "latency_ms": 6.5,
+              "executed": true
+            },
+            {
+              "role": "textbox",
+              "name": " DO",
+              "confidence": 0.992,
+              "latency_ms": 6.8,
+              "executed": true
+            },
+            {
+              "role": "link",
+              "name": "Zamówienia",
+              "confidence": 0.995,
+              "latency_ms": 50.8,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -409,7 +654,23 @@
           "system2_tokens": 0,
           "total_tokens": 179,
           "steps_executed": 2,
-          "final_url": "https://www.gov.pl/"
+          "final_url": "https://www.gov.pl/",
+          "steps_log": [
+            {
+              "role": "textbox",
+              "name": "Wpisz frazę do wyszukania. Naciśnij TAB aby przejść do przycisku.",
+              "confidence": 0.9940000000000001,
+              "latency_ms": 6.2,
+              "executed": true
+            },
+            {
+              "role": "textbox",
+              "name": "Wpisz frazę do wyszukania. Naciśnij TAB aby przejść do przycisku.",
+              "confidence": 0.998,
+              "latency_ms": 49.8,
+              "executed": true
+            }
+          ]
         },
         "base_playwright": {
           "success": true,
@@ -437,7 +698,8 @@
           "system2_tokens": 1347,
           "total_tokens": 1513,
           "steps_executed": 1,
-          "final_url": "https://www.wroclaw.pl/komunikacja/rozklady-jazdy"
+          "final_url": "https://www.wroclaw.pl/komunikacja/rozklady-jazdy",
+          "steps_log": []
         },
         "base_playwright": {
           "success": true,

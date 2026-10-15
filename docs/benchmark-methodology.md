@@ -21,6 +21,7 @@ The benchmark evaluates the performance of **Cognitive Browser** (Reflex Core De
   - Hosted locally via PyTorch (`transformers` AutoModelForSequenceClassification)
   - Precision: FP32 / FP16 depending on torch defaults
   - Inference mode: Zero-shot NLI Softmax between Entailment and Contradiction logits
+  - Measured inference latency on CUDA: **24.9 ms median, 64.6 ms p95** (range: 5.6–95.5 ms, n = 32 interaction steps)
 - **Cortex Escalation Model:**
   - `qwen2.5:1.5b` served locally via Ollama (`http://localhost:11434/api/generate`)
   - Invoked strictly when Reflex confidence is below the escalation threshold ($< 0.50$) or when an element match cannot be found.
@@ -81,17 +82,24 @@ If any intermediate step fails or times out without successful escalation recove
 
 ---
 
-## 6. Baseline Comparison Disclosure (Analytical Simulation)
+## 6. Baseline Estimation Model & Real Harness Disclosure
 
 > [!NOTE]
-> The numbers for **Base Playwright MCP (`@playwright/mcp`)** reported in the summary tables are based on an **analytical simulation model**, not live API calls against proprietary frontier LLMs.
+> The numbers for **Simulated Baseline ReAct Agent** reported in earlier references are based on an **analytical simulation model**, NOT live API execution against a proprietary frontier LLM.
+> 
+> Because an analytical simulation does not execute real browser interactions, **no empirical task completion rate (e.g. "15/15") exists for it**, and it has been excluded from all performance summary tables.
 
-The simulation models standard industry ReAct agent behavior:
+The analytical estimation models standard industry ReAct agent overhead:
 - Initial ARIA snapshot token cost: $\left\lfloor \frac{\text{len}(\text{raw\_snapshot})}{3.5} \right\rfloor + 350$.
 - Step-by-step context growth: The agent context window accumulates prior observations ($400$ tokens per roundtrip).
 - Network latency: Each LLM reasoning turn adds an estimated $2.8\text{ s}$ cloud network + inference roundtrip time.
 
-While this accurately reflects typical ReAct overhead observed in frameworks like `browser-use` or Playwright MCP, it is an analytical projection rather than an empirical trial against a specific commercial provider.
+### Real Playwright MCP Baseline Harness (`benchmarks/run_playwright_mcp_baseline.py`)
+To obtain empirical comparisons against an actual MCP server, the repository provides a dedicated harness:
+```bash
+python benchmarks/run_playwright_mcp_baseline.py --provider openai --model gpt-4o-mini
+```
+**Important Accounting Difference:** When running `run_playwright_mcp_baseline.py`, planning tokens are included in the baseline measurement because the external LLM must autonomously formulate tool calls, inspect DOM snapshots, and recover from failures. In contrast, Cognitive Browser measures execution of pre-scripted workflow steps via local discriminative routing.
 
 ---
 

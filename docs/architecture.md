@@ -93,7 +93,7 @@ flowchart TD
   - **Premise**: `Interactive web element: role: button, name: 'Submit Order'`.
   - **Hypothesis**: `This element represents, opens, or is used to complete checkout`.
 - Computes softmax probabilities over Entailment vs. Contradiction logits.
-- Zero generative LLM tokens consumed; executes in ~25–120 ms on local GPU.
+- Zero generative LLM tokens consumed; executes with 24.9 ms median (64.6 ms p95) inference latency on local CUDA GPU.
 
 ### 5. Cortex Engine Escalation (`cognitive_browser/agent_orchestrator.py`)
 - Triggered when:

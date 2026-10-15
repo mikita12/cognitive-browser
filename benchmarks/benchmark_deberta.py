@@ -7,13 +7,15 @@ Comparison:
 """
 
 import asyncio
-import sys
 import os
+import sys
 import time
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../examples")))
 
 from playwright.async_api import async_playwright
+
 try:
     from extractor import DomCandidateExtractor
 except ImportError:
@@ -47,7 +49,7 @@ async def run_deberta_benchmark():
         raw_html_len = len(raw_html)
         approx_raw_tokens = raw_html_len // 4
 
-        print(f"\n[2/4] DOM Snapshot & Candidate Extraction:")
+        print("\n[2/4] DOM Snapshot & Candidate Extraction:")
         print(f"  -> Raw HTML size: {raw_html_len:,} characters (~{approx_raw_tokens:,} tokens)")
 
         t_ext = time.perf_counter()
@@ -58,23 +60,25 @@ async def run_deberta_benchmark():
         print(f"  -> Data size reduction: {((raw_html_len - (len(candidates) * 50)) / raw_html_len) * 100:.1f}%")
 
         # 2. DeBERTa inference (Reflex Core)
-        print(f"\n[3/4] Discriminative inference (DeBERTa-v3 NLI on GPU):")
+        print("\n[3/4] Discriminative inference (DeBERTa-v3 NLI on GPU):")
         decision = router.evaluate_candidates(intent=intent, candidates=candidates)
 
         print(f"  -> Selected element (ref): {decision['target_ref']}")
         print(f"  -> Playwright action: {decision['tool_action']}")
         print(f"  -> Model confidence (Entailment): {decision['confidence'] * 100:.1f}%")
         print(f"  -> DeBERTa inference latency: {decision['latency_ms']:.2f} ms!")
-        print(f"  -> Tokens generated: 0 (Pure tensor probability)")
+        print("  -> Tokens generated: 0 (Pure tensor probability)")
 
         print("\n  Top 3 candidates ranked by DeBERTa:")
         for rank, c in enumerate(decision["ranked_candidates"][:3], 1):
-            print(f"    {rank}. [{c['confidence_score']*100:5.1f}%] {c['ref']} | <{c['tag']}> {c.get('type') or ''} text='{c.get('text')}' name='{c.get('name')}'")
+            print(
+                f"    {rank}. [{c['confidence_score'] * 100:5.1f}%] {c['ref']} | <{c['tag']}> {c.get('type') or ''} text='{c.get('text')}' name='{c.get('name')}'"
+            )
 
         # 3. Action execution in Playwright
         chosen_ref = decision["target_ref"]
         if chosen_ref != "NONE":
-            print(f"\n[4/4] Executing action in Playwright:")
+            print("\n[4/4] Executing action in Playwright:")
             print(f"  -> Clicking selector: [data-s1-ref='{chosen_ref}']...")
             await page.locator(f"[data-s1-ref='{chosen_ref}']").click()
             print("  -> SUCCESS! Playwright executed the action with zero cloud API overhead.")
@@ -85,10 +89,16 @@ async def run_deberta_benchmark():
         print("=" * 80)
         print(f"{'Method':<32} | {'Model Type':<18} | {'Latency':<14} | {'Token Cost':<15}")
         print("-" * 80)
-        print(f"{'Traditional Agent (Claude/GPT)':<32} | {'Cloud Generative':<18} | {'~3000 - 5000 ms':<14} | {'~12,000 tok./step':<15}")
-        print(f"{'Local LLM (Qwen2.5-1.5B)':<32} | {'Generative LLM':<18} | {'~400 - 450 ms':<14} | {'Local ($0.00)':<15}")
+        print(
+            f"{'Traditional Agent (Claude/GPT)':<32} | {'Cloud Generative':<18} | {'~3000 - 5000 ms':<14} | {'~12,000 tok./step':<15}"
+        )
+        print(
+            f"{'Local LLM (Qwen2.5-1.5B)':<32} | {'Generative LLM':<18} | {'~400 - 450 ms':<14} | {'Local ($0.00)':<15}"
+        )
         deberta_lat = f"{decision['latency_ms']} ms"
-        print(f"{'DeBERTa-v3 NLI (Our Router)':<32} | {'Discriminative':<18} | {deberta_lat:<14} | {'0 tokens ($0.00)':<15}")
+        print(
+            f"{'DeBERTa-v3 NLI (Our Router)':<32} | {'Discriminative':<18} | {deberta_lat:<14} | {'0 tokens ($0.00)':<15}"
+        )
         print("=" * 80)
 
         await browser.close()

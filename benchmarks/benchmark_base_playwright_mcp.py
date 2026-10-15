@@ -6,7 +6,7 @@ Measures roundtrips, DOM snapshot sizes in bytes/tokens, and execution latency.
 
 import asyncio
 import time
-import json
+
 from playwright.async_api import async_playwright
 
 
@@ -21,7 +21,6 @@ async def benchmark_base_playwright():
     step_times = []
 
     async with async_playwright() as p:
-        t_launch = time.perf_counter()
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
 
