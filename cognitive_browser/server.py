@@ -30,9 +30,15 @@ DEVICE = os.getenv(
     "cuda" if torch.cuda.is_available() else ("mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu")
 )
 PORT = int(os.getenv("PORT", "8000"))
-SESSION_DIR = os.getenv("SESSION_DIR", "/data/browser_sessions")
+SESSION_DIR = os.getenv("SESSION_DIR")
+if not SESSION_DIR:
+    SESSION_DIR = "/data/browser_sessions" if os.path.exists("/data") and os.access("/data", os.W_OK) else os.path.expanduser("~/.cognitive_browser/sessions")
 
-os.makedirs(SESSION_DIR, exist_ok=True)
+try:
+    os.makedirs(SESSION_DIR, exist_ok=True)
+except Exception:
+    SESSION_DIR = "/tmp/cognitive_browser_sessions"
+    os.makedirs(SESSION_DIR, exist_ok=True)
 
 # Global instances
 router_instance: Optional[DebertaDecisionRouter] = None
