@@ -7,12 +7,15 @@ services:
     container_name: cognitive-browser
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      # Secure default: bind strictly to loopback interface. Do NOT expose to 0.0.0.0 without API_TOKEN.
+      - "127.0.0.1:8000:8000"
     environment:
       - DEVICE=cuda
       - PORT=8000
       - MODEL_NAME=cross-encoder/nli-deberta-v3-small
       - SESSION_DIR=/data/browser_sessions
+      # Optional: uncomment to secure endpoints with bearer token authentication
+      # - API_TOKEN=your-secret-token-here
     volumes:
       - ./data/browser_sessions:/data/browser_sessions
       - /home/user/.cache/huggingface:/root/.cache/huggingface

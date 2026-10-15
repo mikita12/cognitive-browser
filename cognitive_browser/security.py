@@ -49,9 +49,23 @@ SENSITIVE_KEYWORDS: Set[str] = {
 
 
 def is_private_ip(ip_str: str) -> bool:
-    """Checks whether an IP address belongs to loopback, private, or link-local ranges."""
+    """Checks whether an IP address belongs to loopback, private, link-local, or reserved ranges."""
     try:
-        ip = ipaddress.ip_address(ip_str)
+        clean_ip = ip_str.strip("[]")
+        ip = ipaddress.ip_address(clean_ip)
+
+        # Check IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1)
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+            mapped = ip.ipv4_mapped
+            return (
+                mapped.is_private
+                or mapped.is_loopback
+                or mapped.is_link_local
+                or mapped.is_reserved
+                or mapped.is_multicast
+                or mapped.is_unspecified
+            )
+
         return (
             ip.is_private
             or ip.is_loopback
@@ -70,7 +84,7 @@ def validate_url(url: str, allow_private: Optional[bool] = None, allowed_domains
 
     Rules:
     1. Scheme must be strictly 'http' or 'https'.
-    2. Private/loopback IP addresses and metadata endpoints are rejected by default.
+    2. Private/loopback IP addresses (IPv4 & IPv6) and metadata endpoints are rejected by default.
     3. If ALLOWED_DOMAINS is configured, only matching domains are allowed.
 
     Raises:
@@ -90,6 +104,8 @@ def validate_url(url: str, allow_private: Optional[bool] = None, allowed_domains
     if not hostname:
         raise SecurityError("URL does not contain a valid hostname.")
 
+    clean_host = hostname.strip("[]")
+
     # Determine whether private network access is allowed
     if allow_private is None:
         allow_private = os.getenv("ALLOW_PRIVATE_NETWORKS", "false").lower() in ("true", "1", "yes")
@@ -97,20 +113,20 @@ def validate_url(url: str, allow_private: Optional[bool] = None, allowed_domains
     # 2. SSRF check
     if not allow_private:
         # Check known metadata hosts
-        if hostname in METADATA_HOSTS:
+        if clean_host in METADATA_HOSTS or hostname in METADATA_HOSTS:
             raise SecurityError(f"Access to cloud metadata endpoint '{hostname}' is strictly blocked.")
 
         # Check loopback hostnames
-        if hostname in ("localhost", "localhost.localdomain", "ip6-localhost"):
+        if clean_host in ("localhost", "localhost.localdomain", "ip6-localhost"):
             raise SecurityError(f"Access to loopback host '{hostname}' is blocked.")
 
-        # Check if hostname is direct IP literal
-        if is_private_ip(hostname):
+        # Check if hostname is direct IP literal (IPv4 or IPv6)
+        if is_private_ip(clean_host):
             raise SecurityError(f"Access to private/local IP address '{hostname}' is prohibited (SSRF prevention).")
 
         # Resolve hostname to IP to verify it does not resolve to a private network
         try:
-            addr_info = socket.getaddrinfo(hostname, None)
+            addr_info = socket.getaddrinfo(clean_host, None)
             for entry in addr_info:
                 ip_str = str(entry[4][0])
                 if is_private_ip(ip_str):
@@ -129,7 +145,7 @@ def validate_url(url: str, allow_private: Optional[bool] = None, allowed_domains
         domain_match = False
         for domain in allowed_domains:
             clean_dom = domain.lstrip(".")
-            if hostname == clean_dom or hostname.endswith("." + clean_dom):
+            if clean_host == clean_dom or clean_host.endswith("." + clean_dom):
                 domain_match = True
                 break
 
@@ -141,18 +157,23 @@ def validate_url(url: str, allow_private: Optional[bool] = None, allowed_domains
 
 def mask_sensitive_value(value: Optional[str], instruction: str = "", force_mask: Optional[bool] = None) -> str:
     """
-    Masks sensitive values (passwords, auth tokens) in execution logs and telemetry.
+    Masks values (passwords, tokens, sensitive inputs) in execution logs and telemetry.
+    Masking is ON by default for safety. Users can opt-out by setting DISABLE_FILL_MASKING=true.
     """
     if not value:
         return ""
 
     if force_mask is None:
-        force_mask = os.getenv("MASK_ALL_FILL_VALUES", "false").lower() in ("true", "1", "yes")
+        disabled = os.getenv("DISABLE_FILL_MASKING", "false").lower() in ("true", "1", "yes")
+        if disabled or os.getenv("MASK_ALL_FILL_VALUES", "true").lower() in ("false", "0", "no"):
+            force_mask = False
+        else:
+            force_mask = True
 
     if force_mask:
         return "***"
 
-    # Heuristic detection based on instruction keywords
+    # Even when global masking is opted out, mask sensitive keywords
     inst_lower = instruction.lower()
     for kw in SENSITIVE_KEYWORDS:
         if kw in inst_lower:

@@ -10,8 +10,9 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from playwright.async_api import Browser, async_playwright
 from pydantic import BaseModel, Field
 
@@ -28,6 +29,7 @@ DEVICE = os.getenv(
     else ("mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu"),
 )
 PORT = int(os.getenv("PORT", "8000"))
+API_TOKEN = os.getenv("API_TOKEN", "").strip()
 SESSION_DIR = os.getenv("SESSION_DIR")
 if not SESSION_DIR:
     SESSION_DIR = (
@@ -53,6 +55,12 @@ browser_instance: Optional[Browser] = None
 async def lifespan(app: FastAPI):
     global router_instance, agent_instance, playwright_manager, browser_instance
     print(f"\n🚀 [CognitiveBrowser] Starting server on device: {DEVICE.upper()}...")
+
+    if not os.getenv("API_TOKEN", "").strip():
+        print("⚠️  SECURITY WARNING: No API_TOKEN configured. REST API and SSE endpoints are unauthenticated.")
+        print("    Do NOT expose port 8000 to public networks without setting API_TOKEN!")
+    else:
+        print("🔒 [CognitiveBrowser] API token authentication enabled.")
 
     # Initialize NLI model
     router_instance = DebertaDecisionRouter(model_name=MODEL_NAME, device=DEVICE)
@@ -88,6 +96,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def verify_api_token_middleware(request: Request, call_next):
+    token_configured = os.getenv("API_TOKEN", "").strip()
+    if token_configured:
+        # Public health check and schema documentation
+        if request.url.path in ("/health", "/docs", "/redoc", "/openapi.json"):
+            return await call_next(request)
+
+        auth_header = request.headers.get("Authorization", "")
+        token = None
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+        elif "token" in request.query_params:
+            token = request.query_params.get("token", "").strip()
+
+        if not token or token != token_configured:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Unauthorized: Missing or invalid API token."},
+            )
+
+    return await call_next(request)
 
 
 # Pydantic schemas
