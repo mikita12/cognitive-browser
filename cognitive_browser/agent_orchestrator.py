@@ -15,7 +15,7 @@ from playwright.async_api import Page
 
 from .agent_core import AgentCore, AriaElementParser
 from .router_factory import get_decision_router
-from .security import mask_sensitive_value, sanitize_untrusted_text, validate_url
+from .security import mask_sensitive_value, sanitize_untrusted_text, setup_ssrf_route_guard, validate_url
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen2.5:1.5b"
@@ -105,13 +105,14 @@ Return ONLY a valid JSON object with format:
         escalations_count = 0
         steps_log = []
 
+        # Setup SSRF route guard on context to validate all requests and redirects before dispatch
+        context = getattr(page, "context", page)
+        if hasattr(context, "route"):
+            await setup_ssrf_route_guard(context)
+
         validated_url = validate_url(url)
         await page.goto(validated_url, wait_until="domcontentloaded", timeout=25000)
         await page.wait_for_timeout(1000)
-
-        # Validate final URL after redirects
-        final_url = page.url
-        validate_url(final_url)
 
         # 1. Auto-dismiss cookies
         dismissed = await self.agent.auto_dismiss_overlays(page)

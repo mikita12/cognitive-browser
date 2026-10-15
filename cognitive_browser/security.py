@@ -11,7 +11,7 @@ import os
 import re
 import socket
 import urllib.parse
-from typing import List, Optional, Set
+from typing import Any, List, Optional, Set
 
 
 class SecurityError(ValueError):
@@ -194,3 +194,61 @@ def sanitize_untrusted_text(text: str, max_length: int = 150) -> str:
     # Strip potential prompt injection delimiter markers
     clean = clean.replace("```", "'''")
     return clean[:max_length].strip()
+
+
+async def setup_ssrf_route_guard(
+    target: Any,
+    allow_private: Optional[bool] = None,
+    allowed_domains: Optional[List[str]] = None,
+    exempt_origins: Optional[Set[str]] = None,
+) -> None:
+    """
+    Registers a route handler on a Playwright BrowserContext or Page to intercept
+    and validate every outgoing network request (main document, subresources, XHR,
+    fetch, and HTTP redirects) before dispatch.
+    Requests to private networks, loopback addresses, or cloud metadata endpoints are aborted.
+    """
+    context = getattr(target, "context", target)
+    if not hasattr(context, "route"):
+        return
+
+    async def _ssrf_route_interceptor(route: Any) -> None:
+        req = route.request
+        url = req.url
+
+        # Check if URL belongs to an explicitly exempt origin (used in test fixtures with local servers)
+        is_exempt = exempt_origins is not None and any(url.startswith(origin) for origin in exempt_origins)
+
+        if not is_exempt:
+            try:
+                validate_url(url, allow_private=allow_private, allowed_domains=allowed_domains)
+            except SecurityError:
+                await route.abort("blockedbyclient")
+                return
+
+        try:
+            # Intercept redirect responses before Playwright/Chromium follows them
+            response = await route.fetch(max_redirects=0)
+            if response.status in (301, 302, 303, 307, 308):
+                location = response.headers.get("location")
+                if location:
+                    target_redirect_url = urllib.parse.urljoin(url, location)
+                    is_redirect_exempt = exempt_origins is not None and any(
+                        target_redirect_url.startswith(origin) for origin in exempt_origins
+                    )
+                    if not is_redirect_exempt:
+                        try:
+                            validate_url(
+                                target_redirect_url,
+                                allow_private=allow_private,
+                                allowed_domains=allowed_domains,
+                            )
+                        except SecurityError:
+                            await route.abort("blockedbyclient")
+                            return
+
+            await route.fulfill(response=response)
+        except Exception:
+            await route.abort("blockedbyclient")
+
+    await context.route("**/*", _ssrf_route_interceptor)
