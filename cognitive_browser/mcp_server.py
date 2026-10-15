@@ -68,7 +68,7 @@ async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, A
     """
     validated_url = validate_url(url)
     router, agent, browser, orchestrator = await get_services()
-    page = await browser.new_page()
+    page = await browser.new_page(service_workers="block")
     await setup_ssrf_route_guard(page.context)
 
     try:
@@ -112,7 +112,7 @@ async def get_aria_snapshot(url: str, max_candidates: int = 40) -> Dict[str, Any
     validated_url = validate_url(url)
     t_start = time.perf_counter()
     router, agent, browser, _ = await get_services()
-    page = await browser.new_page()
+    page = await browser.new_page(service_workers="block")
     await setup_ssrf_route_guard(page.context)
     try:
         await page.goto(validated_url, wait_until="domcontentloaded", timeout=20000)
@@ -155,7 +155,7 @@ async def smart_action(url: str, instruction: str, fill_value: Optional[str] = N
     validated_url = validate_url(url)
     t_start = time.perf_counter()
     router, agent, browser, _ = await get_services()
-    page = await browser.new_page()
+    page = await browser.new_page(service_workers="block")
     await setup_ssrf_route_guard(page.context)
     try:
         await page.goto(validated_url, wait_until="domcontentloaded", timeout=20000)

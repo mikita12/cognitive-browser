@@ -191,7 +191,7 @@ async def take_aria_snapshot(req: SnapshotRequest):
         raise HTTPException(status_code=503, detail="Browser instance is not ready")
 
     t0 = time.perf_counter()
-    page = await browser_instance.new_page()
+    page = await browser_instance.new_page(service_workers="block")
     await setup_ssrf_route_guard(page.context)
     try:
         await page.goto(clean_url, wait_until="domcontentloaded", timeout=req.wait_time_ms + 10000)
@@ -231,7 +231,7 @@ async def execute_browse_task(req: BrowseTaskRequest):
         raise HTTPException(status_code=503, detail="Browser or agent engine is not ready")
 
     t0 = time.perf_counter()
-    page = await browser_instance.new_page()
+    page = await browser_instance.new_page(service_workers="block")
     await setup_ssrf_route_guard(page.context)
     steps_log = []
 
