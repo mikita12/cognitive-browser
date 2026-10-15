@@ -5,6 +5,14 @@ Provides full backward compatibility for local execution and legacy container ca
 """
 import sys
 import os
+import warnings
+
+warnings.warn(
+    "Invoking server.py from the repository root is deprecated. "
+    "Please run 'python -m cognitive_browser.server' or the 'cognitive-browser-api' console command.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 # Add root directory to sys.path so cognitive_browser is always importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
