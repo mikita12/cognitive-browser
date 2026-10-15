@@ -1,13 +1,11 @@
 """
-Cognitive Browser: Autonomous Web Agent with Reflex Core (DeBERTa NLI) and Cortex Engine Escalation.
+Cognitive Browser (v0.2.0): High-speed, token-efficient browser automation MCP server.
+Combines local zero-token NLI (Reflex Core) with orchestrating LLM escalation.
 """
 
-from .agent_core import AgentCore, AriaElementParser
-from .agent_orchestrator import AgentOrchestrator
-from .api_router import ApiDecisionRouter
+from .browser import BrowserEngine
 from .config import get_confidence_threshold
-from .deberta_router import DebertaDecisionRouter
-from .router_factory import get_decision_router
+from .reflex import AriaElementParser, ReflexCore
 from .security import (
     SecurityError,
     is_exempt_origin,
@@ -16,14 +14,25 @@ from .security import (
     validate_url,
 )
 
-__version__ = "0.1.0"
+# Backward-compatibility aliases
+DebertaDecisionRouter = ReflexCore
+AgentCore = BrowserEngine
+ApiDecisionRouter = ReflexCore
+
+
+def get_decision_router(device=None):
+    return ReflexCore(device=device)
+
+
+__version__ = "0.2.0"
 __all__ = [
+    "ReflexCore",
+    "BrowserEngine",
+    "AriaElementParser",
     "DebertaDecisionRouter",
     "ApiDecisionRouter",
     "get_decision_router",
     "AgentCore",
-    "AriaElementParser",
-    "AgentOrchestrator",
     "validate_url",
     "setup_ssrf_route_guard",
     "is_exempt_origin",
