@@ -213,9 +213,22 @@ class AgentCore:
             clean_name = re.sub(r"[\ue000-\uf8ff]", "", name).strip()
             name_pattern = re.compile(re.escape(clean_name), re.I) if clean_name else name
 
+            # Try exact match first to prevent substring collision (e.g. 'new' matching 'Hacker News')
+            locator = None
+            if clean_name:
+                exact_pattern = re.compile(r"^\s*" + re.escape(clean_name) + r"\s*$", re.I)
+                exact_loc = page.get_by_role(role, name=exact_pattern).first
+                try:
+                    if await exact_loc.count() > 0:
+                        locator = exact_loc
+                except Exception:
+                    pass
+
+            if locator is None:
+                locator = page.get_by_role(role, name=name_pattern).first
+
             if fill_value:
                 if role in ["combobox", "textbox", "searchbox", "spinbutton"]:
-                    locator = page.get_by_role(role, name=name_pattern).first
                     await locator.fill(fill_value, timeout=5000)
                     masked_val = mask_sensitive_value(fill_value, instruction=instruction)
                     step_info["action_taken"] = f"fill('{masked_val}')"
@@ -228,7 +241,6 @@ class AgentCore:
                     return step_info
             else:
                 # Click action
-                locator = page.get_by_role(role, name=name_pattern).first
                 try:
                     await locator.click(timeout=3500)
                 except Exception:
