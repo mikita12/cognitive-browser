@@ -13,7 +13,7 @@ import os
 import argparse
 import statistics
 import torch
-from typing import List, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from playwright.async_api import async_playwright
 try:
