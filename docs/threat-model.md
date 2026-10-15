@@ -37,5 +37,5 @@ This document provides a concise security analysis of Cognitive Browser, outlini
 The following risks cannot be fully prevented by software guardrails alone and require operational awareness:
 
 1. **Zero-Day Browser Exploits:** If the Chromium browser encounters a zero-day exploit on a malicious page, memory corruption or sandbox escape is handled by Chromium and OS sandboxing, not Python.
-2. **Adversarial NLI Misdirection:** Cleverly crafted adversarial text on a webpage could theoretically manipulate cross-encoder entailment scores to trigger an unintended click on an otherwise valid public site. Setting `REFLEX_CONFIDENCE_THRESHOLD >= 0.65` forces escalation on borderline matches.
+2. **Adversarial NLI Misdirection:** Cleverly crafted adversarial text on a webpage could theoretically manipulate cross-encoder entailment scores to trigger an unintended click on an otherwise valid public site. Setting `REFLEX_CONFIDENCE_THRESHOLD` higher forces borderline matches to escalate to Cortex for secondary evaluation.
 3. **Third-Party CAPTCHA / Bot Challenges:** Cloudflare Turnstile or CAPTCHAs deliberately block automated browsers. Cognitive Browser will escalate or stop rather than attempting bypasses.

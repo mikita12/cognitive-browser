@@ -69,10 +69,85 @@ DEFAULT_CALIBRATION_SAMPLES: List[Dict[str, Any]] = [
             {"ref": "c-forgot-link", "role": "link", "name": "Forgot password?", "text": "Forgot password"},
         ],
     },
+    # Fixture: Local E-Commerce
+    {
+        "intent": "Search Products",
+        "ground_truth_ref": "c-search-box",
+        "candidates": [
+            {"ref": "c-search-box", "role": "searchbox", "name": "Search Products", "text": ""},
+            {"ref": "c-search-btn", "role": "button", "name": "Search", "text": "Search"},
+            {"ref": "c-cart-link", "role": "link", "name": "Shopping Cart", "text": "Shopping Cart"},
+        ],
+    },
+    {
+        "intent": "Search",
+        "ground_truth_ref": "c-search-btn",
+        "candidates": [
+            {"ref": "c-search-box", "role": "searchbox", "name": "Search Products", "text": ""},
+            {"ref": "c-search-btn", "role": "button", "name": "Search", "text": "Search"},
+            {"ref": "c-login-link", "role": "link", "name": "Sign In", "text": "Sign In"},
+        ],
+    },
+    {
+        "intent": "Add laptop to shopping cart",
+        "ground_truth_ref": "c-add-cart",
+        "candidates": [
+            {"ref": "c-add-cart", "role": "button", "name": "Add to Cart", "text": "Add to Cart"},
+            {"ref": "c-search-btn", "role": "button", "name": "Search", "text": "Search"},
+            {"ref": "c-cart-link", "role": "link", "name": "Shopping Cart", "text": "Shopping Cart"},
+        ],
+    },
+    # Fixture: Local Travel Booking
+    {
+        "intent": "Departure station",
+        "ground_truth_ref": "c-from-station",
+        "candidates": [
+            {"ref": "c-from-station", "role": "textbox", "name": "Departure station", "text": ""},
+            {"ref": "c-to-station", "role": "textbox", "name": "Destination station", "text": ""},
+            {"ref": "c-search-conn", "role": "button", "name": "Search connections", "text": "Search connections"},
+        ],
+    },
+    {
+        "intent": "Destination station",
+        "ground_truth_ref": "c-to-station",
+        "candidates": [
+            {"ref": "c-from-station", "role": "textbox", "name": "Departure station", "text": ""},
+            {"ref": "c-to-station", "role": "textbox", "name": "Destination station", "text": ""},
+            {"ref": "c-search-conn", "role": "button", "name": "Search connections", "text": "Search connections"},
+        ],
+    },
+    {
+        "intent": "Search connections",
+        "ground_truth_ref": "c-search-conn",
+        "candidates": [
+            {"ref": "c-from-station", "role": "textbox", "name": "Departure station", "text": ""},
+            {"ref": "c-to-station", "role": "textbox", "name": "Destination station", "text": ""},
+            {"ref": "c-search-conn", "role": "button", "name": "Search connections", "text": "Search connections"},
+        ],
+    },
+    # Ambiguous / impossible tasks (must escalate -> GT: "NONE")
+    {
+        "intent": "Download corporate salary report spreadsheet",
+        "ground_truth_ref": "NONE",
+        "candidates": [
+            {"ref": "c-from-station", "role": "textbox", "name": "Departure station", "text": ""},
+            {"ref": "c-to-station", "role": "textbox", "name": "Destination station", "text": ""},
+            {"ref": "c-search-conn", "role": "button", "name": "Search connections", "text": "Search connections"},
+        ],
+    },
+    {
+        "intent": "Switch system kernel execution profile to superuser",
+        "ground_truth_ref": "NONE",
+        "candidates": [
+            {"ref": "c-search-box", "role": "searchbox", "name": "Search Products", "text": ""},
+            {"ref": "c-search-btn", "role": "button", "name": "Search", "text": "Search"},
+            {"ref": "c-cart-link", "role": "link", "name": "Shopping Cart", "text": "Shopping Cart"},
+        ],
+    },
 ]
 
 
-def evaluate_threshold(evaluated_predictions: List[Dict[str, Any]], threshold: float) -> Dict[str, float]:
+def evaluate_threshold(evaluated_predictions: List[Dict[str, Any]], threshold: float) -> Dict[str, Any]:
     """
     Evaluates predictions at a given confidence threshold.
     """
@@ -118,10 +193,13 @@ def evaluate_threshold(evaluated_predictions: List[Dict[str, Any]], threshold: f
 
 
 def run_sweep(
-    dataset_path: Optional[str] = None, thresholds: Optional[List[float]] = None, output_path: Optional[str] = None
+    dataset_path: Optional[str] = None,
+    thresholds: Optional[List[float]] = None,
+    output_path: Optional[str] = None,
+    live_results_path: Optional[str] = None,
 ):
     if thresholds is None:
-        thresholds = [0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
+        thresholds = [round(0.30 + i * 0.05, 2) for i in range(13)]
 
     # Load dataset
     if dataset_path and os.path.exists(dataset_path):
@@ -130,7 +208,25 @@ def run_sweep(
         print(f"Loaded {len(samples)} evaluation samples from: {dataset_path}")
     else:
         samples = DEFAULT_CALIBRATION_SAMPLES
-        print(f"Using default built-in calibration dataset ({len(samples)} samples).")
+        print(f"Using default calibration dataset ({len(samples)} labeled samples).")
+
+    # Load live benchmark step confidences if available
+    live_confidences: List[float] = []
+    if not live_results_path:
+        default_live = os.path.join(os.path.dirname(os.path.abspath(__file__)), "benchmark_15_cases_results.json")
+        if os.path.exists(default_live):
+            live_results_path = default_live
+
+    if live_results_path and os.path.exists(live_results_path):
+        with open(live_results_path, "r", encoding="utf-8") as f:
+            live_data = json.load(f)
+        runs = live_data.get("runs", [])
+        if runs and len(runs) > 0:
+            for case in runs[0]:
+                for s in case.get("cognitive", {}).get("steps_log", []):
+                    if "confidence" in s:
+                        live_confidences.append(float(s["confidence"]))
+        print(f"Loaded {len(live_confidences)} step confidences from live benchmark: {live_results_path}")
 
     router = get_decision_router()
 
@@ -156,43 +252,63 @@ def run_sweep(
 
     # Sweep thresholds
     sweep_results = []
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 95)
     print("🎯 REFLEX CORE THRESHOLD SWEEP ANALYSIS")
-    print("=" * 80)
+    print("=" * 95)
     print(
-        f"{'Threshold':<11} | {'Precision':<10} | {'Recall':<10} | {'F1 Score':<10} | {'Escalation %':<12} | {'TP':<4} | {'FP':<4} | {'FN':<4} | {'TN':<4}"
+        f"{'Threshold':<10} | {'Precision':<10} | {'Recall':<10} | {'F1 Score':<10} | {'Labeled Esc%':<13} | {'Live Esc%':<10} | {'TP':<4} | {'FP':<4} | {'FN':<4} | {'TN':<4}"
     )
-    print("-" * 80)
+    print("-" * 95)
 
     for th in thresholds:
         metrics = evaluate_threshold(predictions, threshold=th)
+        if live_confidences:
+            live_esc_count = sum(1 for c in live_confidences if c < th)
+            live_esc_rate = round(live_esc_count / len(live_confidences), 4)
+        else:
+            live_esc_rate = 0.0
+        metrics["live_escalation_rate"] = live_esc_rate
+
         sweep_results.append(metrics)
         print(
-            f"{metrics['threshold']:<11.2f} | "
+            f"{metrics['threshold']:<10.2f} | "
             f"{metrics['precision']:<10.2%} | "
             f"{metrics['recall']:<10.2%} | "
             f"{metrics['f1']:<10.4f} | "
-            f"{metrics['escalation_rate']:<12.2%} | "
+            f"{metrics['escalation_rate']:<13.2%} | "
+            f"{metrics['live_escalation_rate']:<10.2%} | "
             f"{metrics['tp']:<4} | "
             f"{metrics['fp']:<4} | "
             f"{metrics['fn']:<4} | "
             f"{metrics['tn']:<4}"
         )
-    print("=" * 80)
+    print("=" * 95)
 
-    if output_path:
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump({"dataset_size": len(samples), "results": sweep_results}, f, indent=2)
-        print(f"Saved threshold sweep report to: {output_path}")
+    output_file = output_path or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "threshold_sweep_results.json"
+    )
+    payload = {
+        "metadata": {
+            "labeled_samples_count": len(samples),
+            "live_steps_count": len(live_confidences),
+            "thresholds_evaluated": thresholds,
+            "device": getattr(router, "device", "unknown"),
+        },
+        "results": sweep_results,
+    }
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    print(f"Saved threshold sweep report to: {output_file}")
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Reflex Core Confidence Threshold Sweep Tool")
     parser.add_argument("--dataset", type=str, default=None, help="Path to JSON dataset of labeled samples")
+    parser.add_argument("--live", type=str, default=None, help="Path to live benchmark results JSON")
     parser.add_argument("--output", type=str, default=None, help="Path to output JSON results")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    run_sweep(dataset_path=args.dataset, output_path=args.output)
+    run_sweep(dataset_path=args.dataset, live_results_path=args.live, output_path=args.output)
