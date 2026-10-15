@@ -1,7 +1,7 @@
 """
-DeBERTa Decision Router (Prawdziwy Dyskryminacyjny Model System 1).
-Wykorzystuje Natural Language Inference (NLI) na modelu DeBERTa-v3 na GPU.
-Zero generowania tokenów tekstowych. Wnioskowanie w kilkadziesiąt milisekund na RTX 4070 Ti.
+DeBERTa Decision Router (Discriminative System 1 Model).
+Utilizes Natural Language Inference (NLI) with DeBERTa-v3 on GPU/MPS/CPU.
+Zero generative LLM tokens consumed. Sub-50ms inference on modern hardware.
 """
 
 import time
@@ -12,9 +12,9 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 class DebertaDecisionRouter:
     """
-    Dyskryminacyjny router decyzyjny oparty o DeBERTa-v3 NLI.
-    Oblicza bezpośrednio prawdopodobieństwo wynikania (entailment)
-    pomiędzy intencją użytkownika a elementami DOM.
+    Discriminative decision router based on DeBERTa-v3 NLI.
+    Directly computes entailment probabilities between user intent
+    and candidates in the DOM / Accessibility tree.
     """
 
     def __init__(self, model_name: str = "cross-encoder/nli-deberta-v3-small", device: Optional[str] = None):
@@ -28,7 +28,7 @@ class DebertaDecisionRouter:
         else:
             self.device = device
 
-        print(f"[DebertaRouter] Ładowanie modelu '{model_name}' na urządzenie {self.device}...")
+        print(f"[DebertaRouter] Loading model '{model_name}' on device {self.device}...")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForSequenceClassification.from_pretrained(model_name).to(self.device)
         self.model.eval()
@@ -55,8 +55,8 @@ class DebertaDecisionRouter:
         confidence_threshold: float = 0.50
     ) -> Dict[str, Any]:
         """
-        Ocenia równolegle wszystkich kandydatów przy użyciu NLI (entailment vs contradiction).
-        Zwraca najlepszy pasujący element, wyliczoną akcję i czas wnioskowania.
+        Evaluates all candidate elements in parallel using NLI (entailment vs contradiction).
+        Returns the top matching element, inferred action, and inference latency.
         """
         if not candidates:
             return {
@@ -70,7 +70,7 @@ class DebertaDecisionRouter:
 
         start_time = time.perf_counter()
 
-        # Budowanie par (Premisa: element DOM, Hipoteza: cel użytkownika)
+        # Build premise-hypothesis pairs (Premise: DOM element, Hypothesis: user goal)
         pairs = []
         for c in candidates:
             parts = [f"tag <{c.get('tag')}>", f"role: {c.get('role')}"]
@@ -87,14 +87,14 @@ class DebertaDecisionRouter:
             hypothesis = f"This element represents, opens, or is used to {intent}."
             pairs.append((premise, hypothesis))
 
-        # Wektorowe wnioskowanie równoległe (Batch Inference na GPU)
+        # Vectorized batch inference on target device
         with torch.no_grad():
             inputs = self.tokenizer(pairs, padding=True, truncation=True, return_tensors="pt").to(self.device)
             outputs = self.model(**inputs)
             logits = outputs.logits
 
-            # Standardowy wzór Zero-Shot NLI (Yin et al. / Hugging Face):
-            # Softmax pomiędzy logitem Entailment a Contradiction
+            # Zero-Shot NLI formulation (Yin et al. / Hugging Face):
+            # Softmax between Entailment and Contradiction logits
             binary_logits = logits[:, [self.contra_idx, self.entail_idx]]
             binary_probs = torch.softmax(binary_logits, dim=-1)[:, 1]
 
@@ -120,7 +120,7 @@ class DebertaDecisionRouter:
         best = scored_candidates[0]
         best_score = best["confidence_score"]
 
-        # Wyznaczenie akcji Playwright
+        # Determine Playwright action
         if best_score < confidence_threshold:
             action = "escalate"
             should_escalate = True

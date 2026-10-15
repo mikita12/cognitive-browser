@@ -1,5 +1,5 @@
 # Cognitive Browser Microservice (System 1 + Playwright + DeBERTa-v3 NLI)
-# Ultralekki, samowystarczalny kontener z natywnym wsparciem GPU (NVIDIA CUDA) oraz fallbackiem CPU.
+# Lightweight, self-contained container with native GPU (NVIDIA CUDA) support and CPU fallback.
 
 FROM python:3.11-slim
 
@@ -11,7 +11,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# 1. Instalacja zależności systemowych
+# 1. Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
@@ -36,24 +36,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Instalacja PyTorch z obsługą CUDA
+# 2. Install PyTorch with CUDA support
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu124
 
-# 3. Kopiowanie i instalacja wymagań Pythona
+# 3. Copy and install Python requirements
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 4. Instalacja silnika przeglądarki Chromium w Playwrighcie
+# 4. Install Playwright Chromium browser engine
 RUN playwright install chromium
 
-# 5. Kopiowanie kodu źródłowego i instalacja pakietu
+# 5. Copy source code and install package
 COPY pyproject.toml /app/
 COPY cognitive_browser/ /app/cognitive_browser/
 COPY mcp_server.py server.py /app/
 RUN pip install --no-cache-dir -e .
 
-# Tworzenie katalogu na sesje
+# Create directory for browser sessions
 RUN mkdir -p /data/browser_sessions
 
 EXPOSE 8000

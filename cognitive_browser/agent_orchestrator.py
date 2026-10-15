@@ -1,8 +1,8 @@
 """
-AgentOrchestrator: Pełna pętla System 1 (DeBERTa) + System 2 (LLM Escalation Recovery).
-Gdy DeBERTa ma wysoką pewność (>0.50), wykonuje krok w 40 ms z 0 tokenami.
-Gdy pewność jest niska (<0.50), System 2 (LLM) analizuje zwięzłe ARIA,
-koryguje krok i pomaga DeBERCIE doprowadzić zadanie do 100% ukończenia.
+AgentOrchestrator: Dual-Tier System 1 (DeBERTa) + System 2 (LLM Active Escalation).
+When DeBERTa has high confidence (>0.50), steps execute in ~40 ms consuming 0 LLM tokens.
+When confidence is low (<0.50), System 2 (LLM) inspects condensed ARIA candidates,
+resolves ambiguity, and assists DeBERTa to achieve 100% task completion.
 """
 
 import asyncio
@@ -38,13 +38,13 @@ class AgentOrchestrator:
 
     def call_system2_llm(self, intent: str, candidates: List[Dict[str, Any]], aria_tree: str, fill_value: Optional[str] = None) -> Dict[str, Any]:
         """
-        System 2 (LLM) wkracza w momencie eskalacji, analizuje zwięzłe ARIA i wskazuje właściwy element.
+        System 2 (LLM) steps in upon escalation, analyzes condensed ARIA candidates and identifies the target element.
         """
         t0 = time.perf_counter()
-        
-        # Przygotowanie zwięzłego kontekstu dla LLM (tylko kluczowe elementy)
+
+        # Build concise context for LLM (relevant elements only)
         element_list_str = "\n".join([f"- [{c['role']}] \"{c['name']}\" (ref: {c['ref']}, details: {c.get('text', '')[:80]})" for c in candidates[:35]])
-        
+
         goal_desc = f'fill "{fill_value}" into the field for "{intent}"' if fill_value else f'achieve "{intent}"'
         prompt = f"""You are System 2 of an autonomous browser agent.
 The user goal is to: {goal_desc}.
@@ -69,8 +69,8 @@ Return ONLY a valid JSON object with format:
             )
             data = resp.json()
             out_text = data.get("response", "{}")
-            prompt_tokens = data.get("prompt_eval_count", int(len(prompt)/3.5))
-            completion_tokens = data.get("eval_count", int(len(out_text)/3.5))
+            prompt_tokens = data.get("prompt_eval_count", int(len(prompt) / 3.5))
+            completion_tokens = data.get("eval_count", int(len(out_text) / 3.5))
             total_tokens = prompt_tokens + completion_tokens
 
             res_json = json.loads(out_text)
@@ -79,7 +79,7 @@ Return ONLY a valid JSON object with format:
             return res_json
 
         except Exception as e:
-            # Fallback na proste dopasowanie słów kluczowych jeśli LLM nie odpowiedział
+            # Fallback if local LLM is unreachable
             return {
                 "chosen_ref": candidates[0]["ref"] if candidates else "NONE",
                 "chosen_name": candidates[0]["name"] if candidates else "",
@@ -91,8 +91,8 @@ Return ONLY a valid JSON object with format:
 
     async def execute_task(self, page: Page, url: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Wykonuje całe zadanie do 100% ukończenia.
-        System 1 wykonuje odruchy, System 2 pomaga przy każdej eskalacji.
+        Executes an entire multi-step task to completion.
+        System 1 handles reflexes; System 2 assists whenever escalation triggers.
         """
         t_start = time.perf_counter()
         total_system2_tokens = 0
@@ -108,21 +108,21 @@ Return ONLY a valid JSON object with format:
         if dismissed:
             steps_log.append({"step": "auto_dismiss_cookies", "status": "dismissed"})
 
-        # 2. Pętla wykonawcza z aktywną eskalacją
+        # 2. Execution loop with active escalation
         for idx, s in enumerate(steps):
             inst = s.get("instruction", "")
             val = s.get("fill_value")
-            
-            # Krok A: Próba Systemu 1 (DeBERTa NLI)
+
+            # Step A: Attempt via System 1 (DeBERTa NLI)
             step_res = await self.agent.execute_step(page=page, instruction=inst, fill_value=val)
             total_system1_gpu_ms += step_res.get("latency_ms", 0.0)
 
-            # Krok B: Jeśli DeBERTa ma wątpliwości -> wkracza System 2!
+            # Step B: If System 1 is uncertain -> escalate to System 2
             if not step_res.get("executed"):
                 escalations_count += 1
-                print(f"     ⚠️ Eskalacja na kroku {idx+1} (\"{inst}\") -> wzywam System 2...")
-                
-                # Pobranie czystego ARIA dla Systemu 2
+                print(f"     ⚠️ Escalation on step {idx+1} (\"{inst}\") -> invoking System 2...")
+
+                # Retrieve fresh ARIA snapshot for System 2
                 current_snapshot = await page.aria_snapshot()
                 candidates = AriaElementParser.parse_snapshot(
                     current_snapshot,
@@ -131,16 +131,16 @@ Return ONLY a valid JSON object with format:
                 )
                 if not candidates and val:
                     candidates = AriaElementParser.parse_snapshot(current_snapshot, max_candidates=50, require_input_only=False)
-                
-                # System 2 analizuje i pomaga
+
+                # System 2 resolves element
                 s2_help = self.call_system2_llm(intent=inst, candidates=candidates, aria_tree=current_snapshot, fill_value=val)
                 total_system2_tokens += s2_help.get("tokens", 0)
-                
+
                 chosen_name = s2_help.get("chosen_name", "")
                 chosen_ref = s2_help.get("chosen_ref", "")
-                print(f"     🧠 System 2 wskazał: \"{chosen_name}\" ({chosen_ref}) w {s2_help.get('latency_ms')} ms (~{s2_help.get('tokens')} tok.)")
-                
-                # Dopasowanie elementu
+                print(f"     🧠 System 2 resolved: \"{chosen_name}\" ({chosen_ref}) in {s2_help.get('latency_ms')} ms (~{s2_help.get('tokens')} tok.)")
+
+                # Match candidate
                 matched_cand = next(
                     (c for c in candidates if c["ref"] == chosen_ref or c["name"] == chosen_name or (chosen_name and chosen_name.lower() in c["name"].lower())),
                     None
@@ -159,7 +159,7 @@ Return ONLY a valid JSON object with format:
                             try:
                                 await page.get_by_role(role, name=name_pattern).first.fill(val, timeout=5000)
                             except Exception:
-                                await page.locator(f"input, textarea").first.fill(val, timeout=4000)
+                                await page.locator("input, textarea").first.fill(val, timeout=4000)
                             step_res["action_taken"] = f"fill('{val}') [assisted by System 2]"
                         else:
                             try:
@@ -169,15 +169,15 @@ Return ONLY a valid JSON object with format:
                                     await page.get_by_role(role, name=name_pattern).first.click(timeout=2000, force=True)
                                 except Exception:
                                     await page.get_by_text(name_pattern, exact=False).first.click(timeout=3000, force=True)
-                            step_res["action_taken"] = f"click() [assisted by System 2]"
-                        
+                            step_res["action_taken"] = "click() [assisted by System 2]"
+
                         step_res["executed"] = True
                         step_res["assisted_by_system2"] = True
                         step_res["error"] = None
                         await page.wait_for_timeout(1000)
                     except Exception as ex:
-                        step_res["error"] = f"Błąd po asyście: {ex}"
-                
+                        step_res["error"] = f"Error after assistance: {ex}"
+
             steps_log.append(step_res)
 
         t_total = time.perf_counter() - t_start

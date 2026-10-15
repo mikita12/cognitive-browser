@@ -1,6 +1,6 @@
 """
-RouterFactory: Fabryka routerów decyzyjnych (DeBERTa Local Free vs API Cloud).
-Automatycznie dobiera optymalny router w zależności od konfiguracji i sprzętu użytkownika.
+RouterFactory: Decision Router Factory (Local DeBERTa vs Cloud API).
+Dynamically selects the optimal router based on user hardware and configuration.
 """
 
 import os
@@ -20,27 +20,27 @@ def get_decision_router(
     api_key: Optional[str] = None
 ) -> Union[DebertaDecisionRouter, ApiDecisionRouter]:
     """
-    Zwraca odpowiedni router decyzyjny.
-    
-    Priorytet wyboru:
-    1. Jawny parametr mode ('deberta' lub 'api')
-    2. Zmienna środowiskowa ROUTER_MODE ('deberta' lub 'api')
-    3. Jeśli obecny jest GROQ_API_KEY lub OPENAI_API_KEY i użytkownik ustawił ROUTER_MODE=api -> ApiDecisionRouter
-    4. Domyślnie: DebertaDecisionRouter (100% lokalny, w 100% darmowy, 0 tokenów)
+    Returns the appropriate decision router.
+
+    Selection priority:
+    1. Explicit 'mode' parameter ('deberta' or 'api')
+    2. Environment variable ROUTER_MODE ('deberta' or 'api')
+    3. If GROQ_API_KEY / OPENAI_API_KEY / HF_TOKEN is present and ROUTER_MODE=api -> ApiDecisionRouter
+    4. Default: DebertaDecisionRouter (100% offline, free, 0 LLM tokens)
     """
     selected_mode = (mode or os.getenv("ROUTER_MODE", "deberta")).lower()
 
     if selected_mode == "api":
         return ApiDecisionRouter(api_key=api_key)
 
-    # Domyślny, darmowy tryb lokalny z DeBERTa-v3
+    # Default: free local mode with DeBERTa-v3
     try:
         return DebertaDecisionRouter(device=device)
     except Exception as e:
-        print(f"[RouterFactory] Ostrzeżenie: Nie udało się załadować lokalnej DeBERTy ({e}).")
-        # Jeśli DeBERTa zawiodła, a mamy klucz API -> automatyczny bezpieczny fallback na API
+        print(f"[RouterFactory] Warning: Could not load local DeBERTa ({e}).")
+        # If DeBERTa fails and an API key is available -> automatic graceful fallback to cloud API
         api_keys = ["HF_TOKEN", "COHERE_API_KEY", "OPENAI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"]
         if any(os.getenv(k) for k in api_keys) or api_key:
-            print("[RouterFactory] Przełączam na tryb awaryjny API (ApiDecisionRouter)...")
+            print("[RouterFactory] Switching to emergency API fallback (ApiDecisionRouter)...")
             return ApiDecisionRouter(api_key=api_key)
         raise e

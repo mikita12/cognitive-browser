@@ -1,7 +1,7 @@
 """
-Wikipedia Semantic Speedrunner (System 1 na GPU RTX 4070 Ti).
-Wyzwanie: Przejście z artykułu 'Most Grunwaldzki' do 'Clang' (kompilator C/C++)
-Poprzez ocenę dziesiątek linków na żywo na GPU w kilkanaście milisekund!
+Wikipedia Semantic Speedrunner (System 1 on GPU).
+Challenge: Traverse from 'Most Grunwaldzki' article to 'Clang' (C/C++ compiler)
+By evaluating dozens of links live on GPU in tens of milliseconds!
 """
 
 import asyncio
@@ -15,7 +15,7 @@ from transformers import AutoTokenizer, AutoModel
 
 class SemanticNavigator:
     def __init__(self, model_id: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", device: str = "cuda"):
-        print(f"[SemanticNavigator] Inicjalizacja modelu {model_id} na GPU ({device})...")
+        print(f"[SemanticNavigator] Initializing model {model_id} on GPU ({device})...")
         self.device = device
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = AutoModel.from_pretrained(model_id).to(device)
@@ -44,7 +44,7 @@ class SemanticNavigator:
         for c, s in zip(candidate_links, sims):
             score = float(s)
             clean_name = c['clean_slug'].lower()
-            # Heurystyczny bonus, gdy pojawia się kluczowe pojęcie
+            # Heuristic bonus for domain concepts
             if "c++" in clean_name or "c++" in c['text'].lower():
                 score += 0.15
             elif "kompilator" in clean_name or "compiler" in clean_name:
@@ -60,13 +60,13 @@ class SemanticNavigator:
 
 async def run_wikipedia_challenge():
     print("=" * 80)
-    print("🚀 WIKIPEDIA SPEEDRUN: MOST GRUNWALDZKI ➡️ KOMPILATOR CLANG")
+    print("🚀 WIKIPEDIA SPEEDRUN: MOST GRUNWALDZKI ➡️ CLANG COMPILER")
     print("=" * 80)
 
     start_url = "https://pl.wikipedia.org/wiki/Most_Grunwaldzki_we_Wroc%C5%82awiu"
     target_keyword = "clang"
     target_semantic = (
-        "kompilator Clang dla języka C i C++ narzędzie programistyczne LLVM kod maszynowy"
+        "Clang compiler for C and C++ programming languages LLVM toolchain machine code"
     )
 
     navigator = SemanticNavigator()
@@ -81,7 +81,7 @@ async def run_wikipedia_challenge():
         )
 
         current_url = start_url
-        print(f"\n[START] Wchodzę na stronę początkową: {current_url}")
+        print(f"\n[START] Opening start article: {current_url}")
         await page.goto(current_url, wait_until="domcontentloaded")
 
         max_hops = 12
@@ -92,24 +92,24 @@ async def run_wikipedia_challenge():
             clean_title = curr_title.split("–")[0].strip()
             history_path.append(clean_title)
 
-            print(f"\n--- SKOK #{hop} ---")
-            print(f"Bieżący artykuł: \"{clean_title}\"")
+            print(f"\n--- HOP #{hop} ---")
+            print(f"Current Article: \"{clean_title}\"")
             print(f"URL: {curr_url}")
 
-            # Sprawdzenie warunku sukcesu
+            # Success condition check
             unquoted_url = urllib.parse.unquote(curr_url).lower()
             if target_keyword in unquoted_url or target_keyword in curr_title.lower():
                 total_duration = time.perf_counter() - t_speedrun_start
                 print("\n" + "🎉" * 40)
-                print(f"🎯 CEL OSIĄGNIĘTY W {hop-1} SKOKACH! (Czas łączny: {total_duration:.2f} s)")
-                print(f"Dotarliśmy do: {curr_title}")
-                print("Ścieżka przejścia:")
+                print(f"🎯 TARGET REACHED IN {hop-1} HOPS! (Total time: {total_duration:.2f} s)")
+                print(f"Landed on: {curr_title}")
+                print("Navigation path:")
                 for i, step in enumerate(history_path, 1):
                     print(f"  {i}. {step}")
                 print("🎉" * 40)
                 break
 
-            # 1. Ekstrakcja linków
+            # 1. Link extraction
             raw_links = await page.evaluate("""() => {
                 const content = document.querySelector('#mw-content-text');
                 if (!content) return [];
@@ -141,27 +141,27 @@ async def run_wikipedia_challenge():
                         "clean_slug": clean_slug
                     })
 
-            print(f"Liczba kandydatów merytorycznych: {len(candidates)}")
+            print(f"Candidate links count: {len(candidates)}")
 
-            # Sprawdzenie bezpośredniego strzału w Clang
+            # Check direct hit
             direct_hit = next((c for c in candidates if target_keyword in c["clean_slug"].lower() or target_keyword in c["text"].lower()), None)
             if direct_hit:
-                print(f"  🔥 Bezpośredni strzał w cel wykryty: '{direct_hit['text']}' -> {direct_hit['href']}!")
+                print(f"  🔥 Direct target match identified: '{direct_hit['text']}' -> {direct_hit['href']}!")
                 await page.goto(direct_hit["href"], wait_until="domcontentloaded")
                 continue
 
-            # 2. Ranking semantyczny na GPU
+            # 2. Semantic ranking on GPU
             t0 = time.perf_counter()
             ranked = navigator.rank_links(target_semantic, candidates)
             latency_ms = (time.perf_counter() - t0) * 1000
 
-            print(f"Czas ewaluacji na RTX 4070 Ti: {latency_ms:.1f} ms")
-            print("Top 3 kierunki:")
+            print(f"Evaluation latency: {latency_ms:.1f} ms")
+            print("Top 3 directions:")
             for rank_i, c in enumerate(ranked[:3], 1):
                 print(f"  {rank_i}. [{c['score']:.4f}] '{c['text']}' -> {c['clean_slug']}")
 
             best = ranked[0]
-            print(f"➡️ Wybrano: '{best['text']}' -> {best['clean_slug']}")
+            print(f"➡️ Selected: '{best['text']}' -> {best['clean_slug']}")
             await page.goto(best["href"], wait_until="domcontentloaded")
             await page.wait_for_timeout(400)
 

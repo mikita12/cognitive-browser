@@ -1,9 +1,9 @@
 """
-ApiDecisionRouter: Chmurowa alternatywa dla lokalnej DeBERTy (Zero-GPU Decision Router).
-Obsługuje prawdziwe modele decyzyjne/dyskryminacyjne przez API:
-1. Hugging Face Inference API (dokładnie nasza DeBERTa-v3 NLI w chmurze przez HF_TOKEN)
-2. Cohere Rerank API (profesjonalny cross-encoder przez COHERE_API_KEY)
-3. Fallback na szybkie LLMy (OpenAI / Groq / OpenRouter)
+ApiDecisionRouter: Cloud alternative to local DeBERTa (Zero-GPU Decision Router).
+Supports true decision/discriminative models over API:
+1. Hugging Face Inference API (DeBERTa-v3 NLI hosted in the cloud via HF_TOKEN)
+2. Cohere Rerank API (Production cross-encoder via COHERE_API_KEY)
+3. Fast LLM fallback (OpenAI / Groq / OpenRouter)
 """
 
 import os
@@ -15,9 +15,9 @@ from typing import List, Dict, Any, Optional
 
 class ApiDecisionRouter:
     """
-    Router decyzyjny oparty o API chmurowe.
-    Wspiera zarówno natywne cross-encodery (HuggingFace DeBERTa, Cohere),
-    jak i fallback na modele generatywne.
+    Cloud API-based decision router.
+    Supports both native cross-encoders (HuggingFace DeBERTa, Cohere Rerank)
+    and fallback fast generative models.
     """
 
     def __init__(
@@ -26,29 +26,29 @@ class ApiDecisionRouter:
         provider: Optional[str] = None,
         model: Optional[str] = None
     ):
-        # 1. Priorytet: Prawdziwy model DeBERTa hostowany na Hugging Face (darmowy token HF)
+        # 1. Priority: DeBERTa model hosted on Hugging Face Inference API
         if os.getenv("HF_TOKEN") or provider == "huggingface":
             self.provider = "huggingface"
             self.api_key = api_key or os.getenv("HF_TOKEN")
             self.model = model or "cross-encoder/nli-deberta-v3-small"
             self.base_url = f"https://api-inference.huggingface.co/models/{self.model}"
-            print(f"[ApiDecisionRouter] Aktywny tryb: Prawdziwa DeBERTa-v3 NLI na Hugging Face API ({self.model})")
+            print(f"[ApiDecisionRouter] Active provider: DeBERTa-v3 NLI on Hugging Face Inference API ({self.model})")
 
-        # 2. Priorytet: Dedykowany Cross-Encoder / Reranker (Cohere)
+        # 2. Priority: Dedicated Cross-Encoder / Reranker (Cohere)
         elif os.getenv("COHERE_API_KEY") or provider == "cohere":
             self.provider = "cohere"
             self.api_key = api_key or os.getenv("COHERE_API_KEY")
             self.model = model or "rerank-v3.5"
             self.base_url = "https://api.cohere.com/v2/rerank"
-            print(f"[ApiDecisionRouter] Aktywny tryb: Dedykowany Cross-Encoder Cohere Rerank ({self.model})")
+            print(f"[ApiDecisionRouter] Active provider: Cohere Rerank Cross-Encoder ({self.model})")
 
-        # 3. Fallback: Groq (szybki LLM)
+        # 3. Fallback: Groq (Fast LLM)
         elif os.getenv("GROQ_API_KEY") or provider == "groq":
             self.provider = "groq"
             self.api_key = api_key or os.getenv("GROQ_API_KEY")
             self.base_url = "https://api.groq.com/openai/v1/chat/completions"
             self.model = model or "llama-3.3-70b-versatile"
-            print(f"[ApiDecisionRouter] Aktywny tryb: Groq Fast LLM ({self.model})")
+            print(f"[ApiDecisionRouter] Active provider: Groq Fast LLM ({self.model})")
 
         # 4. Fallback: OpenAI
         elif os.getenv("OPENAI_API_KEY") or provider == "openai":
@@ -56,14 +56,14 @@ class ApiDecisionRouter:
             self.api_key = api_key or os.getenv("OPENAI_API_KEY")
             self.base_url = "https://api.openai.com/v1/chat/completions"
             self.model = model or "gpt-4o-mini"
-            print(f"[ApiDecisionRouter] Aktywny tryb: OpenAI ({self.model})")
+            print(f"[ApiDecisionRouter] Active provider: OpenAI ({self.model})")
 
         else:
             self.provider = "openai"
             self.api_key = api_key or os.getenv("ROUTER_API_KEY", "")
             self.base_url = os.getenv("ROUTER_BASE_URL", "https://api.openai.com/v1/chat/completions")
             self.model = model or os.getenv("ROUTER_MODEL", "gpt-4o-mini")
-            print(f"[ApiDecisionRouter] Aktywny tryb domyślny: {self.provider} ({self.model})")
+            print(f"[ApiDecisionRouter] Active default provider: {self.provider} ({self.model})")
 
     def evaluate_candidates(
         self,
@@ -90,12 +90,12 @@ class ApiDecisionRouter:
 
     def _evaluate_huggingface_nli(self, intent: str, candidates: List[Dict[str, Any]], threshold: float) -> Dict[str, Any]:
         """
-        Natywne wnioskowanie NLI na serwerach Hugging Face (Dokładnie ta sama DeBERTa-v3).
+        Native NLI inference on Hugging Face Inference API (same DeBERTa-v3 architecture).
         """
         t0 = time.perf_counter()
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        
-        # Przygotowanie par Premisa -> Hipoteza
+
+        # Build Premise -> Hypothesis pairs
         hypothesis = f"This element represents, opens, or is used to {intent}."
         pairs = []
         for c in candidates[:40]:
@@ -106,11 +106,10 @@ class ApiDecisionRouter:
             resp = requests.post(self.base_url, headers=headers, json={"inputs": pairs}, timeout=8)
             data = resp.json()
 
-            # Hugging Face NLI zwraca listę etykiet ze score dla każdej pary
+            # Hugging Face NLI returns label scores for each pair
             scored = []
             for idx, res_item in enumerate(data):
                 cand = candidates[idx]
-                # Znajdź prawdopodobieństwo entailment
                 entail_score = next((x["score"] for x in res_item if "entail" in x.get("label", "").lower()), 0.0)
                 scored.append({"cand": cand, "score": entail_score})
 
@@ -135,7 +134,7 @@ class ApiDecisionRouter:
 
     def _evaluate_cohere_rerank(self, intent: str, candidates: List[Dict[str, Any]], threshold: float) -> Dict[str, Any]:
         """
-        Wnioskowanie dyskryminacyjne przez Cohere Rerank API (Cross-Encoder).
+        Discriminative inference via Cohere Rerank API (Cross-Encoder).
         """
         t0 = time.perf_counter()
         headers = {
@@ -143,7 +142,7 @@ class ApiDecisionRouter:
             "Content-Type": "application/json"
         }
         docs = [f"role: {c['role']}, name: {c['name']}, info: {c.get('text', '')}" for c in candidates[:50]]
-        
+
         payload = {
             "model": self.model,
             "query": f"Find button or input to {intent}",
@@ -157,7 +156,7 @@ class ApiDecisionRouter:
             results = data.get("results", [])
 
             if not results:
-                return self._fallback_error(candidates, "Brak wyników z Cohere", time.perf_counter() - t0)
+                return self._fallback_error(candidates, "No results returned from Cohere", time.perf_counter() - t0)
 
             best_idx = results[0]["index"]
             confidence = round(results[0]["relevance_score"], 4)
@@ -182,7 +181,7 @@ class ApiDecisionRouter:
 
     def _evaluate_generic_llm(self, intent: str, candidates: List[Dict[str, Any]], threshold: float) -> Dict[str, Any]:
         """
-        Awaryjny fallback na szybkie zapytanie JSON do OpenAI / Groq.
+        Fallback fast JSON query to OpenAI / Groq.
         """
         t0 = time.perf_counter()
         cands_snippet = "\n".join([f"- {c['ref']}: [{c['role']}] \"{c['name']}\"" for c in candidates[:40]])

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Wrocław Pizza Delivery Hunter - powered by Agentic Decision Router (System 1 + ARIA Snapshot).
-Szybka weryfikacja pizzerii we Wrocławiu posiadających własną stronę WWW oraz bezpośredni system zamówień online z dostawą.
+Wroclaw Pizza Delivery Hunter - powered by Agentic Decision Router (System 1 + ARIA Snapshot).
+Rapid verification of local pizzerias with dedicated online delivery systems.
 """
 
 import asyncio
@@ -17,108 +17,108 @@ except ImportError:
     from deberta_router import DebertaDecisionRouter
 
 
-# Baza kandydatów: pizzerie we Wrocławiu posiadające własne domeny WWW
+# Candidate database: pizzerias in Wroclaw with web ordering domains
 CANDIDATE_PIZZERIAS = [
     {
         "name": "Express Pizza (Detroit Deep Dish)",
         "url": "https://expresspizza.pl",
-        "style": "Detroit Deep Dish (amerykańska puszysta w stylu Hi Pie)",
-        "districts": "Cały Wrocław (lokale: Sokolnicza, Krzycka, Barskich/Żerniki, Śliczna, Nadodrze, Psie Pole)"
+        "style": "Detroit Deep Dish (Fluffy American Hi Pie)",
+        "districts": "Citywide Wroclaw"
     },
     {
         "name": "Mania Smaku",
         "url": "https://mania.pizza",
-        "style": "Rzemieślnicza / klasyczna i autorskie kompozycje",
-        "districts": "Cały Wrocław (Krzyki, Grabiszyn, Huby, Śródmieście)"
+        "style": "Artisanal & craft specialty pizza",
+        "districts": "Citywide Wroclaw (Krzyki, Grabiszyn, Huby, Śródmieście)"
     },
     {
         "name": "Pizzeria Muzyczna",
         "url": "https://pizzeriamuzyczna.pl",
-        "style": "Klasyczna wrocławska / bogate składniki",
-        "districts": "Cały Wrocław (Jedności Narodowej, Oleska, Bulwar Dedala, Krzyki)"
+        "style": "Classic local style / rich toppings",
+        "districts": "Citywide Wroclaw"
     },
     {
         "name": "Pizzu",
         "url": "https://pizzu.pl",
-        "style": "Tradycyjna włoska / neapolitańska",
+        "style": "Traditional Italian / Neapolitan",
         "districts": "Nowy Dwór, Kuźniki, Muchobór, Żerniki, Gądów"
     },
     {
         "name": "Pizza Mobile",
         "url": "https://pizzamobile.pl",
-        "style": "Klasyczna / amerykańska",
+        "style": "Classic / American",
         "districts": "Gądów, Nowy Dwór, Kuźniki, Kozanów, Popowice, Pilczyce"
     },
     {
         "name": "Pizza Station",
         "url": "https://pizzastation.pl",
-        "style": "Amerykańska na grubym i cienkim cieście",
-        "districts": "Wrocław Zachód / Północ / Śródmieście"
+        "style": "American pan and thin crust",
+        "districts": "Wroclaw West / North / Downtown"
     },
     {
         "name": "Pizza Time",
         "url": "https://pizza-time.pl",
-        "style": "Włoska cienkie ciasto",
-        "districts": "Krzyki, Borek, Oporów, Gaj, Śródmieście"
+        "style": "Italian thin crust",
+        "districts": "Krzyki, Borek, Oporów, Gaj, Downtown"
     },
     {
         "name": "Pizzeria Migliori",
         "url": "https://pizzamigliori.pl",
-        "style": "Klasyczna / włoska z pieca",
+        "style": "Stone-baked Italian",
         "districts": "Kozanów, Pilczyce, Popowice, Maślice"
     },
     {
         "name": "Appetito",
         "url": "https://appe.pl",
-        "style": "Włoska tradycyjna z pieca",
-        "districts": "Grabiszyn, Gajowice, Krzyki, Centrum"
+        "style": "Wood-fired traditional Italian",
+        "districts": "Grabiszyn, Gajowice, Krzyki, City Center"
     },
     {
         "name": "La Finezze",
         "url": "https://lafinezze.pl",
-        "style": "Tradycyjna z bogatym menu",
+        "style": "Traditional Italian",
         "districts": "Popowice, Szczepin, Nadodrze, Nowy Dwór, Stabłowice"
     },
     {
-        "name": "Da Grasso Wrocław",
+        "name": "Da Grasso Wroclaw",
         "url": "https://www.dagrasso.pl",
-        "style": "Polska klasyczna (z kultowymi sosami)",
-        "districts": "Wielolokalowa sieć we Wrocławiu (Krzyki, Śródmieście, Fabryczna)"
+        "style": "Polish classic (famous house sauces)",
+        "districts": "Multiple locations across Wroclaw"
     },
     {
-        "name": "Pizza Hut Wrocław",
+        "name": "Pizza Hut Wroclaw",
         "url": "https://pizzahut.pl",
-        "style": "Amerykańska Pan / San Francisco",
-        "districts": "Wszystkie dzielnice Wrocławia"
+        "style": "American Pan / San Francisco",
+        "districts": "All Wroclaw districts"
     },
     {
-        "name": "Papa John's Wrocław",
+        "name": "Papa John's Wroclaw",
         "url": "https://papajohns.pl",
-        "style": "Amerykańska z sosem czosnkowym",
-        "districts": "Centrum, Krzyki, Śródmieście"
+        "style": "American style with signature garlic dip",
+        "districts": "City Center, Krzyki, Downtown"
     },
     {
         "name": "Pizzeria Bube",
         "url": "https://pizzeriabube.pl",
-        "style": "Autentyczna włoska neapolitańska",
-        "districts": "Krzyki, Nadodrze, Śródmieście"
+        "style": "Authentic Neapolitan",
+        "districts": "Krzyki, Nadodrze, Downtown"
     },
     {
-        "name": "Pizzeria 105 (Stopiątka)",
+        "name": "Pizzeria 105",
         "url": "https://105.pl",
-        "style": "Klasyczna polska / szeroki wybór",
+        "style": "Classic Polish crust",
         "districts": "Psie Pole, Fabryczna, Krzyki"
     },
     {
         "name": "Pizzeria Bravo",
         "url": "https://bravopizza.pl",
-        "style": "Klasyczna / studencka",
-        "districts": "Śródmieście, Plac Grunwaldzki, Ołbin"
+        "style": "Classic budget student pizza",
+        "districts": "Downtown, Plac Grunwaldzki, Ołbin"
     },
     {
         "name": "Pizzeria Biesiadowo",
         "url": "https://biesiadowo.pl",
-        "style": "Polska biesiadna (duże rozmiary)",
+        "style": "Large Polish banquet pizza",
         "districts": "Fabryczna, Nowy Dwór, Psie Pole"
     }
 ]
@@ -126,7 +126,7 @@ CANDIDATE_PIZZERIAS = [
 
 async def verify_pizzerias():
     print("=" * 80)
-    print("🚀 START: WROCŁAW PIZZA DELIVERY HUNTER (System 1 + ARIA Snapshot)")
+    print("🚀 START: WROCLAW PIZZA DELIVERY HUNTER (System 1 + ARIA Snapshot)")
     print("=" * 80)
 
     router = DebertaDecisionRouter(device="cuda")
@@ -142,34 +142,33 @@ async def verify_pizzerias():
         for item in CANDIDATE_PIZZERIAS:
             name = item["name"]
             url = item["url"]
-            print(f"\n🔍 Sprawdzam: {name} ({url})...")
+            print(f"\n🔍 Checking: {name} ({url})...")
             start_t = time.perf_counter()
 
             page = await context.new_page()
             try:
-                # Wchodzimy na stronę z timeoutem 12s
-                resp = await page.goto(url, wait_until="domcontentloaded", timeout=12000)
+                await page.goto(url, wait_until="domcontentloaded", timeout=12000)
                 await page.wait_for_timeout(1000)
 
-                # Pobieramy czyste drzewo ARIA
+                # Extract condensed ARIA tree
                 snapshot = await page.aria_snapshot()
                 candidates = AriaElementParser.parse_snapshot(snapshot, max_candidates=40)
 
-                # Pytamy DeBERTę: czy strona posiada przycisk / moduł zamówienia online z dostawą?
+                # Query DeBERTa router
                 decision = router.evaluate_candidates(
-                    intent="zamów online jedzenie z dostawą do domu lub do koszyka",
+                    intent="order food online for home delivery or add to cart",
                     candidates=candidates
                 )
 
                 elapsed_ms = (time.perf_counter() - start_t) * 1000
                 conf = decision["confidence"]
                 best_cand = decision["ranked_candidates"][0] if decision["ranked_candidates"] else None
-                action_text = best_cand["text"] if best_cand else "Brak"
+                action_text = best_cand["text"] if best_cand else "None"
 
                 is_valid_order_site = conf > 0.45 and best_cand is not None
 
-                print(f"  ⏱ Czas analizy: {elapsed_ms:.1f} ms | Pewność NLI: {conf:.2%}")
-                print(f"  🎯 Znaleziony element akcji: [{best_cand['role'] if best_cand else ''}] \"{action_text}\"")
+                print(f"  ⏱ Analysis latency: {elapsed_ms:.1f} ms | NLI Confidence: {conf:.2%}")
+                print(f"  🎯 Action trigger found: [{best_cand['role'] if best_cand else ''}] \"{action_text}\"")
 
                 results.append({
                     "name": name,
@@ -183,7 +182,7 @@ async def verify_pizzerias():
                 })
 
             except Exception as e:
-                print(f"  ❌ Błąd ładowania {url}: {e}")
+                print(f"  ❌ Error loading {url}: {e}")
                 results.append({
                     "name": name,
                     "url": url,
@@ -198,7 +197,7 @@ async def verify_pizzerias():
         await browser.close()
 
     print("\n" + "=" * 80)
-    print("📊 PODSUMOWANIE ZWERYFIKOWANYCH PIZZERII WE WROCŁAWIU")
+    print("📊 VERIFIED PIZZERIAS SUMMARY")
     print("=" * 80)
 
     output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wroclaw_pizzerias_report.json")
@@ -206,12 +205,12 @@ async def verify_pizzerias():
         json.dump(results, f, ensure_ascii=False, indent=2)
 
     for r in results:
-        status = "✅ ZAMÓWIENIA ONLINE" if r.get("verified_online_order") else "⚠️ SPRAWDŹ TELEFONICZNIE"
+        status = "✅ ONLINE ORDERING" if r.get("verified_online_order") else "⚠️ PHONE ORDER ONLY"
         print(f"{status} | {r['name']} ({r['url']})")
-        print(f"   Styl: {r['style']}")
-        print(f"   Zasięg dowozu: {r['districts']}")
+        print(f"   Style: {r['style']}")
+        print(f"   Delivery area: {r['districts']}")
         if "order_trigger" in r:
-            print(f"   Przycisk zamówienia: \"{r['order_trigger']}\" (Pewność: {r['confidence']:.1%})\n")
+            print(f"   Order button: \"{r['order_trigger']}\" (Confidence: {r['confidence']:.1%})\n")
 
 
 if __name__ == "__main__":

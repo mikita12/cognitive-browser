@@ -1,24 +1,23 @@
-# 🧱 Cognitive Browser – Samodzielny Kontenerowy Klocek (Microservice)
+# 🧱 Cognitive Browser – Standalone Container Microservice
 
-Autonomiczny, ultralekki silnik nawigacji webowej oparty o **System 1 (Playwright ARIA Snapshot + DeBERTa-v3 NLI)** zamknięty w kontenerze Docker. 
+Autonomous, ultra-lightweight web navigation engine powered by **System 1 (Playwright ARIA Snapshot + DeBERTa-v3 NLI)** packaged inside a Docker container.
 
-Zaprojektowany jako gotowy, samowystarczalny moduł do podpięcia pod dowolnego agenta AI (przez MCP), system automatyzacji (n8n, Make) lub własny kod w Pythonie/Node.js (przez REST API).
+Designed as a self-contained, drop-in building block for any AI agent (via MCP), workflow automation platform (n8n, Make), or custom Python/Node.js application (via REST API).
 
 ---
 
-## 🚀 Szybki Start (Uruchomienie Klocka)
+## 🚀 Quickstart (Running the Microservice)
 
-### 1. Uruchomienie z GPU (RTX 4070 Ti – rekomendowane, czas decyzji ~40 ms)
+### 1. Launch with GPU (NVIDIA CUDA recommended, ~40 ms decision latency)
 ```bash
-cd .
 docker compose up -d --build
 ```
 
-### 2. Sprawdzenie stanu (Healthcheck)
+### 2. Verify Service Health (Healthcheck)
 ```bash
 curl http://localhost:8000/health
 ```
-Odpowiedź:
+Example response:
 ```json
 {
   "status": "healthy",
@@ -32,62 +31,62 @@ Odpowiedź:
 
 ---
 
-## 🔌 Dostępne Interfejsy
+## 🔌 Available Interfaces
 
-### A. REST API (dla skryptów, botów, n8n, cURL)
+### A. REST API (for scripts, bots, n8n, cURL)
 
-#### 1. Autonomiczna wielokrokowa nawigacja (`POST /v1/browse`)
-Wykonuje sekwencję kroków w języku naturalnym. Samodzielnie zamyka modale cookies i klika odpowiednie elementy ARIA:
+#### 1. Autonomous multi-step navigation (`POST /v1/browse`)
+Executes a sequence of natural language steps. Automatically handles cookie consent banners and interacts with target ARIA elements:
 ```bash
 curl -X POST http://localhost:8000/v1/browse \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://wikipedia.org",
     "steps": [
-      {"instruction": "wpisz wyszukiwane hasło do pola wyszukiwania", "fill_value": "Wrocław"},
-      {"instruction": "kliknij przycisk wyszukiwania"}
+      {"instruction": "type search query into the search field", "fill_value": "Artificial intelligence"},
+      {"instruction": "click the search button"}
     ]
   }'
 ```
 
-#### 2. Czyste drzewo ARIA bez szumu HTML (`POST /v1/snapshot`)
-Zwraca strukturę strony zredukowaną o 98% względem surowego HTML:
+#### 2. Clean ARIA tree without HTML noise (`POST /v1/snapshot`)
+Returns page accessibility tree condensed by ~98% relative to raw HTML:
 ```bash
 curl -X POST http://localhost:8000/v1/snapshot \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://olx.pl", "max_candidates": 30}'
+  -d '{"url": "https://wikipedia.org", "max_candidates": 30}'
 ```
 
-#### 3. Błyskawiczna ewaluacja semantyczna NLI (`POST /v1/evaluate`)
-Wycena kandydatów w 40 ms na GPU bez użycia tokenów:
+#### 3. Sub-50ms semantic NLI evaluation (`POST /v1/evaluate`)
+Evaluates candidate elements on GPU with 0 LLM tokens consumed:
 ```bash
 curl -X POST http://localhost:8000/v1/evaluate \
   -H "Content-Type: application/json" \
   -d '{
-    "intent": "zaakceptuj zgody na cookies",
+    "intent": "accept cookie consent",
     "candidates": [
-      {"ref": "c-1", "role": "button", "name": "Zgadzam się na wszystkie", "text": "Zgadzam się"},
-      {"ref": "c-2", "role": "link", "name": "Polityka prywatności", "text": "Polityka"}
+      {"ref": "c-1", "role": "button", "name": "Accept all cookies", "text": "Accept all"},
+      {"ref": "c-2", "role": "link", "name": "Privacy policy", "text": "Privacy policy"}
     ]
   }'
 ```
 
 ---
 
-### B. Protokół MCP (dla Agentów AI: Antigravity, Claude Desktop, Cursor)
+## B. MCP Protocol (for AI Agents: Antigravity, Claude Desktop, Cursor)
 
-Kontener wystawia specyfikację narzędzi pod adresem:
+The container exposes tool definitions at:
 `GET http://localhost:8000/v1/mcp/tools`
 
-Narzędzia widoczne dla agenta:
-* `cognitive_browse`: Autonomiczne wykonanie celu na stronie bez zużywania tokenów w pętli.
-* `get_aria_snapshot`: Pobranie skompresowanego stanu strony.
+Tools exposed to the agent:
+* `cognitive_browse`: Autonomously completes navigation goals on web pages with 0 token consumption during UI execution.
+* `get_aria_snapshot`: Extracts condensed semantic page state.
 
 ---
 
-## 📁 Trwałość Danych i Sesji (Cookies / Logowania)
+## 📁 Persistence & Session Storage (Cookies / Authentication)
 
-Wszystkie sesje przeglądarki są zapisywane w podmontowanym wolumenie:
+Browser sessions and state are persisted inside the mounted volume:
 `./data/browser_sessions:/data/browser_sessions`
 
-Dzięki temu kontener po restarcie pamięta zalogowane konta (Facebook, OLX, portale ogłoszeniowe).
+This ensures logged-in sessions (marketplaces, portals, accounts) persist across container restarts.

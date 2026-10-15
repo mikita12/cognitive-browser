@@ -2,8 +2,8 @@
   {
     "name": "Express Pizza (Detroit Deep Dish)",
     "url": "https://expresspizza.pl",
-    "style": "Detroit Deep Dish (amerykańska puszysta w stylu Hi Pie)",
-    "districts": "Cały Wrocław (lokale: Sokolnicza, Krzycka, Barskich/Żerniki, Śliczna, Nadodrze, Psie Pole)",
+    "style": "Detroit Deep Dish (Fluffy American Hi Pie)",
+    "districts": "Citywide Wrocław",
     "verified_online_order": true,
     "confidence": 0.6022,
     "order_trigger": "Zobacz wszystkie reelsy Express Pizza",
@@ -12,8 +12,8 @@
   {
     "name": "Mania Smaku",
     "url": "https://mania.pizza",
-    "style": "Rzemieślnicza / klasyczna i autorskie kompozycje",
-    "districts": "Cały Wrocław (Krzyki, Grabiszyn, Huby, Śródmieście)",
+    "style": "Artisanal & craft specialty pizza",
+    "districts": "Citywide Wrocław (Krzyki, Grabiszyn, Huby, Śródmieście)",
     "verified_online_order": true,
     "confidence": 0.6286,
     "order_trigger": "Zarządzaj zgodą",
@@ -22,8 +22,8 @@
   {
     "name": "Pizzeria Muzyczna",
     "url": "https://pizzeriamuzyczna.pl",
-    "style": "Klasyczna wrocławska / bogate składniki",
-    "districts": "Cały Wrocław (Jedności Narodowej, Oleska, Bulwar Dedala, Krzyki)",
+    "style": "Classic local style / rich toppings",
+    "districts": "Citywide Wrocław",
     "verified_online_order": true,
     "confidence": 0.7798,
     "order_trigger": "Dowiedz się więcej",
@@ -32,7 +32,7 @@
   {
     "name": "Pizzu",
     "url": "https://pizzu.pl",
-    "style": "Tradycyjna włoska / neapolitańska",
+    "style": "Traditional Italian / Neapolitan",
     "districts": "Nowy Dwór, Kuźniki, Muchobór, Żerniki, Gądów",
     "verified_online_order": true,
     "confidence": 0.7545,
@@ -42,7 +42,7 @@
   {
     "name": "Pizza Mobile",
     "url": "https://pizzamobile.pl",
-    "style": "Klasyczna / amerykańska",
+    "style": "Classic / American",
     "districts": "Gądów, Nowy Dwór, Kuźniki, Kozanów, Popowice, Pilczyce",
     "verified_online_order": true,
     "confidence": 0.5907,
@@ -52,8 +52,8 @@
   {
     "name": "Pizza Station",
     "url": "https://pizzastation.pl",
-    "style": "Amerykańska na grubym i cienkim cieście",
-    "districts": "Wrocław Zachód / Północ / Śródmieście",
+    "style": "American pan and thin crust",
+    "districts": "Wrocław West / North / Downtown",
     "verified_online_order": true,
     "confidence": 0.7164,
     "order_trigger": "Program Lojalnościowy Pizza Station Wielka Wyspa Zbierz 5 pieczątek i otrzymaj kupon na 30% rabatu na produkty w koszyku",
@@ -62,8 +62,8 @@
   {
     "name": "Pizza Time",
     "url": "https://pizza-time.pl",
-    "style": "Włoska cienkie ciasto",
-    "districts": "Krzyki, Borek, Oporów, Gaj, Śródmieście",
+    "style": "Italian thin crust",
+    "districts": "Krzyki, Borek, Oporów, Gaj, Downtown",
     "verified_online_order": true,
     "confidence": 0.8104,
     "order_trigger": "Ser w brzegach możesz dodać do każdej pizzy! Jest to coś wyjątkowego. Znane z popularnej sieciówki, ale u nas w prawdziw",
@@ -72,7 +72,7 @@
   {
     "name": "Pizzeria Migliori",
     "url": "https://pizzamigliori.pl",
-    "style": "Klasyczna / włoska z pieca",
+    "style": "Stone-baked Italian",
     "districts": "Kozanów, Pilczyce, Popowice, Maślice",
     "verified_online_order": true,
     "confidence": 0.7868,
@@ -82,8 +82,8 @@
   {
     "name": "Appetito",
     "url": "https://appe.pl",
-    "style": "Włoska tradycyjna z pieca",
-    "districts": "Grabiszyn, Gajowice, Krzyki, Centrum",
+    "style": "Wood-fired traditional Italian",
+    "districts": "Grabiszyn, Gajowice, Krzyki, City Center",
     "verified_online_order": true,
     "confidence": 0.7168,
     "order_trigger": "Zobacz wszystkie opinie",
@@ -92,7 +92,7 @@
   {
     "name": "La Finezze",
     "url": "https://lafinezze.pl",
-    "style": "Tradycyjna z bogatym menu",
+    "style": "Traditional Italian",
     "districts": "Popowice, Szczepin, Nadodrze, Nowy Dwór, Stabłowice",
     "verified_online_order": true,
     "confidence": 0.5777,
@@ -102,8 +102,8 @@
   {
     "name": "Da Grasso Wrocław",
     "url": "https://www.dagrasso.pl",
-    "style": "Polska klasyczna (z kultowymi sosami)",
-    "districts": "Wielolokalowa sieć we Wrocławiu (Krzyki, Śródmieście, Fabryczna)",
+    "style": "Polish classic (famous house sauces)",
+    "districts": "Multiple locations across Wrocław",
     "verified_online_order": true,
     "confidence": 0.7141,
     "order_trigger": "Wykaz składników",
@@ -112,8 +112,8 @@
   {
     "name": "Pizza Hut Wrocław",
     "url": "https://pizzahut.pl",
-    "style": "Amerykańska Pan / San Francisco",
-    "districts": "Wszystkie dzielnice Wrocławia",
+    "style": "American Pan / San Francisco",
+    "districts": "All Wrocław districts",
     "verified_online_order": true,
     "confidence": 0.7174,
     "order_trigger": "Więcej informacji o Twojej prywatności, otwiera się w nowym oknie",
@@ -122,8 +122,8 @@
   {
     "name": "Papa John's Wrocław",
     "url": "https://papajohns.pl",
-    "style": "Amerykańska z sosem czosnkowym",
-    "districts": "Centrum, Krzyki, Śródmieście",
+    "style": "American style with signature garlic dip",
+    "districts": "City Center, Krzyki, Downtown",
     "verified_online_order": true,
     "confidence": 0.6355,
     "order_trigger": "1670 NOWOŚĆ",
@@ -132,8 +132,8 @@
   {
     "name": "Pizzeria Bube",
     "url": "https://pizzeriabube.pl",
-    "style": "Autentyczna włoska neapolitańska",
-    "districts": "Krzyki, Nadodrze, Śródmieście",
+    "style": "Authentic Neapolitan",
+    "districts": "Krzyki, Nadodrze, Downtown",
     "verified_online_order": false,
     "error": "Page.goto: net::ERR_NAME_NOT_RESOLVED at https://pizzeriabube.pl/\nCall log:\n  - navigating to \"https://pizzeriabube.pl/\", waiting until \"domcontentloaded\"\n"
   },
@@ -150,8 +150,8 @@
   {
     "name": "Pizzeria Bravo",
     "url": "https://bravopizza.pl",
-    "style": "Klasyczna / studencka",
-    "districts": "Śródmieście, Plac Grunwaldzki, Ołbin",
+    "style": "Classic budget student pizza",
+    "districts": "Downtown, Plac Grunwaldzki, Ołbin",
     "verified_online_order": true,
     "confidence": 0.6111,
     "order_trigger": "Pinterest",
@@ -160,7 +160,7 @@
   {
     "name": "Pizzeria Biesiadowo",
     "url": "https://biesiadowo.pl",
-    "style": "Polska biesiadna (duże rozmiary)",
+    "style": "Large Polish banquet pizza",
     "districts": "Fabryczna, Nowy Dwór, Psie Pole",
     "verified_online_order": true,
     "confidence": 0.6339,
