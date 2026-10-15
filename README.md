@@ -10,19 +10,19 @@ By resolving routine element interactions through Natural Language Inference (NL
 
 ---
 
-## Benchmark: 15-Case Web Automation Evaluation
+## Benchmark: 15-Case Web Automation Performance
 
 > **Methodology Notice:**
-> The metrics below reflect execution of pre-scripted multi-step workflows across 15 web applications. Upstream planning tokens (the initial formulation of the step sequence by an external agent) are **not included**. Baseline figures for standard Playwright MCP are derived from an analytical ReAct simulation model. For complete hardware specifications, model configurations, and token accounting rules, read [docs/benchmark-methodology.md](docs/benchmark-methodology.md).
+> The metrics below reflect empirical execution of pre-scripted multi-step workflows across 15 real-world web applications on NVIDIA GeForce RTX 4070 Ti (CUDA). Upstream planning tokens (formulating the initial sequence of steps) are **not included**. For full hardware specifications, per-task breakdowns, and token accounting definitions, read [docs/benchmark-methodology.md](docs/benchmark-methodology.md).
 
-| Metric | Simulated Baseline ReAct Agent | Cognitive Browser (Reflex + Cortex) | Measured Difference |
-|---|:---:|:---:|:---:|
-| **Interaction Token Consumption** | ~372,073 tokens | 4,300 tokens | 98.8% token reduction on routine steps |
-| **Average Task Duration** | ~18.12 s (simulated network) | 5.37 s (local CUDA GPU) | ~3.4x faster step execution via local routing |
-| **Reflex Core Decision Latency** | N/A (Cloud LLM call ~2–4 s) | ~6–95 ms/step (~63.1 ms/task on CUDA) | Sub-second local discriminative decision loop |
-| **Task Completion on Test Set** | 15 / 15 | 15 / 15 | 100% completion across all 15 live workflows |
+| Metric | Measured Absolute Value | Measurement Scope & Definition |
+|---|:---:|---|
+| **Task Completion** | **15 / 15 (100%)** | Full execution to completion across all 15 real-world live workflows |
+| **Reflex Step Inference Latency (CUDA)** | **24.9 ms** (median) / **64.6 ms** (p95) | Tensor forward pass per interaction step (n = 32 steps, range: 5.6–95.5 ms) |
+| **Average Task Duration** | **5.37 s** | Total wall-clock time per task (browser navigation, overlays, and actions) |
+| **Total Interaction Tokens (15 tasks)** | **4,300 tokens** | Combined across all 15 tasks (13 tasks used 0 LLM tokens; 2 required Cortex escalation) |
 
-*(Benchmark run data available in [`benchmarks/benchmark_15_cases_results.json`](benchmarks/benchmark_15_cases_results.json))*.
+*(Raw benchmark data: [`benchmarks/benchmark_15_cases_results.json`](benchmarks/benchmark_15_cases_results.json) | Summary script: [`benchmarks/summarize_results.py`](benchmarks/summarize_results.py))*.
 
 ---
 
@@ -37,7 +37,7 @@ flowchart TD
     
     Snapshot --> Reflex["Reflex Core: DeBERTa-v3 NLI Cross-Encoder\n(Local GPU / MPS / CPU)"]
     
-    Reflex -- "Confidence >= Threshold (default: 0.50)" --> Exec["Direct Playwright Action\n(fill / click) in ~25-120 ms"]
+    Reflex -- "Confidence >= Threshold (default: 0.50)" --> Exec["Direct Playwright Action\n(fill / click) (median: 24.9 ms, p95: 64.6 ms)"]
     
     Reflex -- "Confidence < Threshold or Unmatched" --> Cortex["Cortex Engine: LLM Escalation\n(Ollama / Cloud LLM)"]
     Cortex -->|"Resolves candidate element"| Exec

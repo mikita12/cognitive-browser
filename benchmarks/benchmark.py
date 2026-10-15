@@ -6,20 +6,21 @@ Compares:
 """
 
 import asyncio
-import time
-import json
-import sys
 import os
+import sys
+import time
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../examples")))
 
 from playwright.async_api import async_playwright
+
 try:
+    from decision_pool import ParallelDecisionPool
     from extractor import DomCandidateExtractor
-    from decision_pool import ParallelDecisionPool, DecisionWorker
 except ImportError:
+    from examples.decision_pool import ParallelDecisionPool
     from examples.extractor import DomCandidateExtractor
-    from examples.decision_pool import ParallelDecisionPool, DecisionWorker
 
 
 async def run_benchmark():
@@ -43,16 +44,18 @@ async def run_benchmark():
         raw_html_len = len(raw_html)
         approx_raw_tokens = raw_html_len // 4
 
-        print(f"\n[2/4] METHOD A (Traditional Cloud LLM Agent):")
+        print("\n[2/4] METHOD A (Traditional Cloud LLM Agent):")
         print(f"  -> Raw HTML size: {raw_html_len:,} characters")
         print(f"  -> Approximate prompt tokens: ~{approx_raw_tokens:,} tokens")
-        print(f"  -> Estimated response time (Claude/GPT): ~3.0 - 5.5 seconds")
-        print(f"  -> Estimated API cost (Claude 3.5 Sonnet): ~${(approx_raw_tokens / 1_000_000) * 3.00:.4f} for this single step")
+        print("  -> Estimated response time (Claude/GPT): ~3.0 - 5.5 seconds")
+        print(
+            f"  -> Estimated API cost (Claude 3.5 Sonnet): ~${(approx_raw_tokens / 1_000_000) * 3.00:.4f} for this single step"
+        )
 
         # -------------------------------------------------------------
         # Approach 2: Reflex Core Decision Router
         # -------------------------------------------------------------
-        print(f"\n[3/4] METHOD B (Our Reflex Core Decision Router):")
+        print("\n[3/4] METHOD B (Our Reflex Core Decision Router):")
         t0 = time.perf_counter()
         candidates = await DomCandidateExtractor.extract_interactive_elements(page)
         extract_time = (time.perf_counter() - t0) * 1000
@@ -69,14 +72,14 @@ async def run_benchmark():
         # -------------------------------------------------------------
         # Step 3: Concurrent decision model pool query
         # -------------------------------------------------------------
-        print(f"\n[4/4] Querying parallel decision model pool (Ensemble)...")
+        print("\n[4/4] Querying parallel decision model pool (Ensemble)...")
         pool = ParallelDecisionPool(models=["llama3.2:1b", "qwen2.5:1.5b"])
 
         t_pool_start = time.perf_counter()
         results = await pool.evaluate_intent(intent, prompt_text, valid_refs)
         total_pool_time = (time.perf_counter() - t_pool_start) * 1000
 
-        print(f"\n" + "-" * 70)
+        print("\n" + "-" * 70)
         print("DECISION MODEL RESULTS (CONCURRENT EXECUTION):")
         print("-" * 70)
 

@@ -6,10 +6,12 @@ Cloud/Server Baseline (ApplyPilot + Ornith-1.5:35B LLM)
 """
 
 import asyncio
-import time
 import json
 import subprocess
+import time
+
 from playwright.async_api import async_playwright
+
 try:
     from cognitive_browser import AgentCore
 except ImportError:
@@ -41,7 +43,7 @@ def fetch_server_ornith_stats():
             "min_latency_s": min(latencies_s),
             "avg_in_tokens": sum(in_tokens) / len(in_tokens),
             "avg_out_tokens": sum(out_tokens) / len(out_tokens),
-            "total_model_time_s": sum(latencies_s)
+            "total_model_time_s": sum(latencies_s),
         }
     except Exception as e:
         print(f"Note: Could not retrieve server telemetry: {e}")
@@ -61,7 +63,7 @@ async def run_our_agent_benchmark():
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-            locale="en-US"
+            locale="en-US",
         )
         page = await context.new_page()
 
@@ -76,25 +78,17 @@ async def run_our_agent_benchmark():
 
         # 2. Input search query
         print("\n[Step 3] Instruction: 'Enter search query to find product items in search bar'...")
-        res_fill = await agent.execute_step(
-            page,
-            instruction="enter search query to find product items in search bar",
-            fill_value="iPhone 15"
+        await agent.execute_step(
+            page, instruction="enter search query to find product items in search bar", fill_value="iPhone 15"
         )
 
         # 3. Submit search
         print("\n[Step 4] Instruction: 'Click search submit button to search for offers'...")
-        res_search = await agent.execute_step(
-            page,
-            instruction="click search submit button to search for offers"
-        )
+        await agent.execute_step(page, instruction="click search submit button to search for offers")
 
         # 4. Select listing
         print("\n[Step 5] Instruction: 'Open listing offer for iPhone 15 Pro Max'...")
-        res_offer = await agent.execute_step(
-            page,
-            instruction="open listing offer for iPhone 15 Pro Max"
-        )
+        await agent.execute_step(page, instruction="open listing offer for iPhone 15 Pro Max")
 
         total_time_s = time.perf_counter() - t_start
         print(f"\n-> Final browser URL: {page.url}")
@@ -102,10 +96,7 @@ async def run_our_agent_benchmark():
 
         await browser.close()
 
-    return {
-        "execution_log": agent.execution_log,
-        "total_time_s": total_time_s
-    }
+    return {"execution_log": agent.execution_log, "total_time_s": total_time_s}
 
 
 def print_comparison_table(our_results, server_stats):
@@ -121,8 +112,12 @@ def print_comparison_table(our_results, server_stats):
     print(f"{'Metric':<38} | {'Cloud LLM (Ornith-35B)':<28} | {'Our Agent (DeBERTa-v3 GPU)':<25}")
     print("-" * 90)
 
-    server_avg_lat = f"{server_stats['avg_latency_s']:.2f} s ({server_stats['avg_latency_s']*1000:.0f} ms)" if server_stats else "N/A"
-    our_avg_lat = f"{avg_deberta_ms:.2f} ms ({avg_deberta_ms/1000:.3f} s)"
+    server_avg_lat = (
+        f"{server_stats['avg_latency_s']:.2f} s ({server_stats['avg_latency_s'] * 1000:.0f} ms)"
+        if server_stats
+        else "N/A"
+    )
+    our_avg_lat = f"{avg_deberta_ms:.2f} ms ({avg_deberta_ms / 1000:.3f} s)"
     print(f"{'Avg Decision Latency / Step':<38} | {server_avg_lat:<28} | {our_avg_lat:<25}")
 
     server_max_lat = f"{server_stats['max_latency_s']:.2f} s" if server_stats else "N/A"
@@ -142,7 +137,7 @@ def print_comparison_table(our_results, server_stats):
     print(f"{'Element Targeting / Locators':<38} | {'Full YAML Snapshot Dump':<28} | {'Native ARIA Roles':<25}")
     print(f"{'Modal / Overlay Hang Risk':<38} | {'High (14-78s delay)':<28} | {'Minimal (30-50ms dismiss)':<25}")
 
-    speedup = (server_stats['avg_latency_s'] * 1000) / avg_deberta_ms if (server_stats and avg_deberta_ms > 0) else 0
+    speedup = (server_stats["avg_latency_s"] * 1000) / avg_deberta_ms if (server_stats and avg_deberta_ms > 0) else 0
     print("=" * 90)
     print(f"🚀 INFERENCE SPEEDUP: Our architecture makes decisions {speedup:.1f}x FASTER!")
     print("=" * 90)

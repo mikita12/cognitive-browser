@@ -7,19 +7,18 @@ Usage:
     python benchmarks/threshold_sweep.py --dataset path/to/dataset.json
 """
 
+import argparse
+import json
 import os
 import sys
-import json
-import argparse
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 try:
-    from cognitive_browser import DebertaDecisionRouter, get_decision_router
+    from cognitive_browser import get_decision_router
 except ImportError:
-    from deberta_router import DebertaDecisionRouter
     from router_factory import get_decision_router
 
 
@@ -31,8 +30,8 @@ DEFAULT_CALIBRATION_SAMPLES: List[Dict[str, Any]] = [
         "candidates": [
             {"ref": "c-search-btn", "role": "button", "name": "Search flights", "text": "Search flights"},
             {"ref": "c-hotel-btn", "role": "button", "name": "Hotels & Stays", "text": "Hotels"},
-            {"ref": "c-faq-link", "role": "link", "name": "Customer Support FAQ", "text": "FAQ"}
-        ]
+            {"ref": "c-faq-link", "role": "link", "name": "Customer Support FAQ", "text": "FAQ"},
+        ],
     },
     {
         "intent": "Enter departure city",
@@ -40,8 +39,8 @@ DEFAULT_CALIBRATION_SAMPLES: List[Dict[str, Any]] = [
         "candidates": [
             {"ref": "c-from-input", "role": "textbox", "name": "Departure city or airport", "text": "From"},
             {"ref": "c-to-input", "role": "textbox", "name": "Destination city", "text": "To"},
-            {"ref": "c-submit-btn", "role": "button", "name": "Continue", "text": "Continue"}
-        ]
+            {"ref": "c-submit-btn", "role": "button", "name": "Continue", "text": "Continue"},
+        ],
     },
     {
         "intent": "Accept all cookies and privacy terms",
@@ -49,8 +48,8 @@ DEFAULT_CALIBRATION_SAMPLES: List[Dict[str, Any]] = [
         "candidates": [
             {"ref": "c-accept-cookie", "role": "button", "name": "Accept all cookies", "text": "Accept"},
             {"ref": "c-reject-cookie", "role": "button", "name": "Reject non-essential", "text": "Reject"},
-            {"ref": "c-terms-link", "role": "link", "name": "Privacy Policy", "text": "Policy"}
-        ]
+            {"ref": "c-terms-link", "role": "link", "name": "Privacy Policy", "text": "Policy"},
+        ],
     },
     {
         "intent": "Purchase VIP diamond subscription for $1000",
@@ -58,8 +57,8 @@ DEFAULT_CALIBRATION_SAMPLES: List[Dict[str, Any]] = [
         "candidates": [
             {"ref": "c-doc-link", "role": "link", "name": "Wikipedia Main Page", "text": "Main Page"},
             {"ref": "c-about-link", "role": "link", "name": "About Wikipedia", "text": "About"},
-            {"ref": "c-donate-link", "role": "link", "name": "Donate to Wikimedia", "text": "Donate"}
-        ]
+            {"ref": "c-donate-link", "role": "link", "name": "Donate to Wikimedia", "text": "Donate"},
+        ],
     },
     {
         "intent": "Log in with username and password",
@@ -67,16 +66,13 @@ DEFAULT_CALIBRATION_SAMPLES: List[Dict[str, Any]] = [
         "candidates": [
             {"ref": "c-login-btn", "role": "button", "name": "Sign In to your account", "text": "Sign In"},
             {"ref": "c-register-btn", "role": "button", "name": "Create new account", "text": "Register"},
-            {"ref": "c-forgot-link", "role": "link", "name": "Forgot password?", "text": "Forgot password"}
-        ]
-    }
+            {"ref": "c-forgot-link", "role": "link", "name": "Forgot password?", "text": "Forgot password"},
+        ],
+    },
 ]
 
 
-def evaluate_threshold(
-    evaluated_predictions: List[Dict[str, Any]],
-    threshold: float
-) -> Dict[str, float]:
+def evaluate_threshold(evaluated_predictions: List[Dict[str, Any]], threshold: float) -> Dict[str, float]:
     """
     Evaluates predictions at a given confidence threshold.
     """
@@ -117,14 +113,12 @@ def evaluate_threshold(
         "precision": round(precision, 4),
         "recall": round(recall, 4),
         "f1": round(f1, 4),
-        "escalation_rate": round(escalation_rate, 4)
+        "escalation_rate": round(escalation_rate, 4),
     }
 
 
 def run_sweep(
-    dataset_path: Optional[str] = None,
-    thresholds: Optional[List[float]] = None,
-    output_path: Optional[str] = None
+    dataset_path: Optional[str] = None, thresholds: Optional[List[float]] = None, output_path: Optional[str] = None
 ):
     if thresholds is None:
         thresholds = [0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
@@ -150,20 +144,24 @@ def run_sweep(
 
         # Evaluate with 0.0 threshold to get raw top prediction and confidence
         res = router.evaluate_candidates(intent=intent, candidates=candidates, confidence_threshold=0.0)
-        predictions.append({
-            "intent": intent,
-            "ground_truth_ref": gt,
-            "predicted_ref": res.get("target_ref", "NONE"),
-            "confidence": res.get("confidence", 0.0),
-            "latency_ms": res.get("latency_ms", 0.0)
-        })
+        predictions.append(
+            {
+                "intent": intent,
+                "ground_truth_ref": gt,
+                "predicted_ref": res.get("target_ref", "NONE"),
+                "confidence": res.get("confidence", 0.0),
+                "latency_ms": res.get("latency_ms", 0.0),
+            }
+        )
 
     # Sweep thresholds
     sweep_results = []
     print("\n" + "=" * 80)
     print("🎯 REFLEX CORE THRESHOLD SWEEP ANALYSIS")
     print("=" * 80)
-    print(f"{'Threshold':<11} | {'Precision':<10} | {'Recall':<10} | {'F1 Score':<10} | {'Escalation %':<12} | {'TP':<4} | {'FP':<4} | {'FN':<4} | {'TN':<4}")
+    print(
+        f"{'Threshold':<11} | {'Precision':<10} | {'Recall':<10} | {'F1 Score':<10} | {'Escalation %':<12} | {'TP':<4} | {'FP':<4} | {'FN':<4} | {'TN':<4}"
+    )
     print("-" * 80)
 
     for th in thresholds:
