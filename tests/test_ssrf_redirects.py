@@ -255,7 +255,7 @@ class TestSSRFRedirectGuards(unittest.IsolatedAsyncioTestCase):
 
                 return await original_route(pattern, wrapped_handler)
 
-            setattr(context, "route", route_spy)
+            context.route = route_spy  # type: ignore[method-assign,assignment]
 
             # Run production setup_ssrf_route_guard
             await setup_ssrf_route_guard(context, exempt_origins={self.base_url})
