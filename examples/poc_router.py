@@ -62,7 +62,7 @@ async def main():
         content = await page.inner_text("body")
         sample_state = content[:1500]
 
-        print("[System 1] Inspecting page for visible login form...")
+        print("[Reflex Core] Inspecting page for visible login form...")
         is_login = await router.decide_binary(
             state_text=sample_state,
             question="Is there currently a visible login form displayed on the page?",

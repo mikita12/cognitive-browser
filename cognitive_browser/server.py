@@ -1,5 +1,5 @@
 """
-Cognitive Browser Microservice (System 1 + Playwright + DeBERTa-v3).
+Cognitive Browser Microservice (Reflex Core + Playwright + DeBERTa-v3).
 Universal containerized microservice exposing the local decision engine
 via both REST API and Model Context Protocol (MCP) for AI agents.
 """
@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Cognitive Browser Decision Microservice",
-    description="Ultra-fast local System 1 router for Playwright browser automation on GPU",
+    description="Ultra-fast local Reflex Core router for Playwright browser automation on GPU",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -128,7 +128,7 @@ async def health_check():
 
 @app.post("/v1/evaluate")
 async def evaluate_candidates(req: EvaluateRequest):
-    """Fast NLI inference (System 1) on provided candidate elements."""
+    """Fast NLI inference (Reflex Core) on provided candidate elements."""
     if not router_instance:
         raise HTTPException(status_code=503, detail="NLI model is not initialized")
 
@@ -176,7 +176,7 @@ async def take_aria_snapshot(req: SnapshotRequest):
 @app.post("/v1/browse")
 async def execute_browse_task(req: BrowseTaskRequest):
     """
-    Multi-step browser execution using System 1 decision engine.
+    Multi-step browser execution using Reflex Core decision engine.
     Supports sequences of instructions or high-level goals.
     """
     if not browser_instance or not agent_instance:
@@ -241,7 +241,7 @@ async def list_mcp_tools():
         "tools": [
             {
                 "name": "cognitive_browse",
-                "description": "Autonomous web browsing powered by System 1 (DeBERTa-v3) with 0 token consumption during interaction.",
+                "description": "Autonomous web browsing powered by Reflex Core (DeBERTa-v3) with 0 token consumption during interaction.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {

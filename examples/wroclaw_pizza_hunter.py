@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Wroclaw Pizza Delivery Hunter - powered by Agentic Decision Router (System 1 + ARIA Snapshot).
+Wroclaw Pizza Delivery Hunter - powered by Agentic Decision Router (Reflex Core + ARIA Snapshot).
 Rapid verification of local pizzerias with dedicated online delivery systems.
 """
 
@@ -126,7 +126,7 @@ CANDIDATE_PIZZERIAS = [
 
 async def verify_pizzerias():
     print("=" * 80)
-    print("🚀 START: WROCLAW PIZZA DELIVERY HUNTER (System 1 + ARIA Snapshot)")
+    print("🚀 START: WROCLAW PIZZA DELIVERY HUNTER (Reflex Core + ARIA Snapshot)")
     print("=" * 80)
 
     router = DebertaDecisionRouter(device="cuda")

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-15 Real-World Web Automation Benchmark: Cognitive Browser (S1 DeBERTa + S2 Active Escalation) vs Base Playwright MCP.
+15 Real-World Web Automation Benchmark: Cognitive Browser (Reflex Core DeBERTa + Cortex Active Escalation) vs Base Playwright MCP.
 Full measurement of end-to-end tasks driven to 100% completion.
-When DeBERTa encounters ambiguity or modal obstructions, System 2 (LLM) assists in real-time.
+When DeBERTa encounters ambiguity or modal obstructions, Cortex Engine (LLM) assists in real-time.
 Tested against standard Playwright MCP pattern where every single step requires full ARIA snapshots and cloud LLM calls.
 """
 
@@ -181,7 +181,7 @@ async def run_benchmark():
     device = "cuda" if torch.cuda.is_available() else ("mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu")
     print("=" * 95)
     print("🚀 COMPREHENSIVE BENCHMARK: 15 REAL-WORLD WEB AUTOMATION TASKS TO 100% COMPLETION")
-    print(f"   Hardware: {device.upper()} | System 1 (DeBERTa-v3) + System 2 (LLM Active Escalation)")
+    print(f"   Hardware: {device.upper()} | Reflex Core (DeBERTa-v3) + Cortex Engine (LLM Active Escalation)")
     print("   VS Base Playwright MCP (Standard Industry Agent with repeated ARIA dumps)")
     print("=" * 95)
 
@@ -201,9 +201,9 @@ async def run_benchmark():
             print(f"       URL: {url} | Steps: {len(steps)}")
 
             # -----------------------------------------------------------------
-            # TEST A: COGNITIVE BROWSER (SYSTEM 1 + SYSTEM 2 ACTIVE ESCALATION)
+            # TEST A: COGNITIVE BROWSER (REFLEX CORE + CORTEX ENGINE ACTIVE ESCALATION)
             # -----------------------------------------------------------------
-            print("  ⚡ [Cognitive Browser] Executing task with active S2 assistance...")
+            print("  ⚡ [Cognitive Browser] Executing task with active Cortex assistance...")
             cog_page = await browser.new_page()
             try:
                 cog_res = await orch.execute_task(page=cog_page, url=url, steps=steps)
@@ -222,14 +222,14 @@ async def run_benchmark():
 
             cog_success = cog_res.get("status") == "completed"
             cog_time = cog_res.get("total_execution_seconds", 0.0)
-            cog_gpu = cog_res.get("system1_gpu_ms", 0.0)
-            cog_s2_tokens = cog_res.get("system2_tokens", 0)
+            cog_gpu = cog_res.get("reflex_gpu_ms", cog_res.get("system1_gpu_ms", 0.0))
+            cog_s2_tokens = cog_res.get("cortex_tokens", cog_res.get("system2_tokens", 0))
             cog_escalations = cog_res.get("escalations_count", 0)
 
             # Add protocol JSON overhead
             cog_total_tokens = 150 + int(len(json.dumps(steps)) / 3.5) + cog_s2_tokens
 
-            print(f"     Status: {'✅ 100% COMPLETED' if cog_success else '⚠️ PARTIAL'} | Time: {cog_time:.2f} s | GPU: {cog_gpu:.1f} ms | Escalations: {cog_escalations} | S2 Tokens: {cog_s2_tokens} | Total: ~{cog_total_tokens} tok.")
+            print(f"     Status: {'✅ 100% COMPLETED' if cog_success else '⚠️ PARTIAL'} | Time: {cog_time:.2f} s | GPU: {cog_gpu:.1f} ms | Escalations: {cog_escalations} | Cortex Tokens: {cog_s2_tokens} | Total: ~{cog_total_tokens} tok.")
 
             # -----------------------------------------------------------------
             # TEST B: BASE PLAYWRIGHT MCP (STANDARD STEP-BY-STEP REASONING)
@@ -313,6 +313,7 @@ async def run_benchmark():
                     "total_time_s": round(cog_time, 2),
                     "gpu_inference_ms": round(cog_gpu, 2),
                     "escalations_count": cog_escalations,
+                    "cortex_tokens": cog_s2_tokens,
                     "system2_tokens": cog_s2_tokens,
                     "total_tokens": cog_total_tokens,
                     "steps_executed": cog_res.get("steps_executed", 0),
@@ -348,8 +349,8 @@ async def run_benchmark():
     print("\n" + "=" * 95)
     print("📊 BENCHMARK SUMMARY (15 REAL-WORLD CASES)")
     print("=" * 95)
-    print(f"Task Completion: Cognitive Browser: {cog_completed_count}/15 (100% with S2) | Base Playwright: {base_completed_count}/15")
-    print(f"System 2 Escalations: {total_escalations} (all successfully resolved in loop)")
+    print(f"Task Completion: Cognitive Browser: {cog_completed_count}/15 (100% with Cortex) | Base Playwright: {base_completed_count}/15")
+    print(f"Cortex Escalations: {total_escalations} (all successfully resolved in loop)")
     print(f"Token Consumption: Cognitive: {total_cog_tokens:,} tok. | Base Playwright: {total_base_tokens:,} tok.")
     print(f"Token Reduction:   {((total_base_tokens - total_cog_tokens) / total_base_tokens * 100):.1f}% LESS TOKENS!")
     print(f"Average Duration:  Cognitive: {avg_cog_time:.2f} s | Base Playwright: {avg_base_time:.2f} s")

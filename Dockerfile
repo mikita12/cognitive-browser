@@ -1,4 +1,4 @@
-# Cognitive Browser Microservice (System 1 + Playwright + DeBERTa-v3 NLI)
+# Cognitive Browser Microservice (Reflex Core + Playwright + DeBERTa-v3 NLI)
 # Lightweight, self-contained container with native GPU (NVIDIA CUDA) support and CPU fallback.
 
 FROM python:3.11-slim

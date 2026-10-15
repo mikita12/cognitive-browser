@@ -1,8 +1,8 @@
 """
-AgentOrchestrator: Dual-Tier System 1 (DeBERTa) + System 2 (LLM Active Escalation).
-When DeBERTa has high confidence (>0.50), steps execute in ~40 ms consuming 0 LLM tokens.
-When confidence is low (<0.50), System 2 (LLM) inspects condensed ARIA candidates,
-resolves ambiguity, and assists DeBERTa to achieve 100% task completion.
+AgentOrchestrator: Dual-Tier Reflex Core (DeBERTa) + Cortex Engine (LLM Active Escalation).
+When Reflex Core has high confidence (>0.50), steps execute in ~40 ms consuming 0 LLM tokens.
+When confidence is low (<0.50), Cortex Engine (LLM) inspects condensed ARIA candidates,
+resolves ambiguity, and assists Reflex Core to achieve 100% task completion.
 """
 
 import asyncio
@@ -36,9 +36,9 @@ class AgentOrchestrator:
             self.router = get_decision_router(device=device)
         self.agent = AgentCore(device=device, router=self.router)
 
-    def call_system2_llm(self, intent: str, candidates: List[Dict[str, Any]], aria_tree: str, fill_value: Optional[str] = None) -> Dict[str, Any]:
+    def call_cortex_llm(self, intent: str, candidates: List[Dict[str, Any]], aria_tree: str, fill_value: Optional[str] = None) -> Dict[str, Any]:
         """
-        System 2 (LLM) steps in upon escalation, analyzes condensed ARIA candidates and identifies the target element.
+        Cortex Engine (LLM) steps in upon escalation, analyzes condensed ARIA candidates and identifies the target element.
         """
         t0 = time.perf_counter()
 
@@ -46,9 +46,9 @@ class AgentOrchestrator:
         element_list_str = "\n".join([f"- [{c['role']}] \"{c['name']}\" (ref: {c['ref']}, details: {c.get('text', '')[:80]})" for c in candidates[:35]])
 
         goal_desc = f'fill "{fill_value}" into the field for "{intent}"' if fill_value else f'achieve "{intent}"'
-        prompt = f"""You are System 2 of an autonomous browser agent.
+        prompt = f"""You are Cortex, the deliberative reasoning engine of an autonomous browser agent.
 The user goal is to: {goal_desc}.
-System 1 (reflex router) was uncertain or encountered an obstruction.
+Reflex Core (reflex router) was uncertain or encountered an obstruction.
 Here are the available interactive elements on the page:
 {element_list_str}
 
@@ -89,14 +89,17 @@ Return ONLY a valid JSON object with format:
                 "error": str(e)
             }
 
+    # Backward-compatibility alias
+    call_system2_llm = call_cortex_llm
+
     async def execute_task(self, page: Page, url: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Executes an entire multi-step task to completion.
-        System 1 handles reflexes; System 2 assists whenever escalation triggers.
+        Reflex Core handles reflexes; Cortex Engine assists whenever escalation triggers.
         """
         t_start = time.perf_counter()
-        total_system2_tokens = 0
-        total_system1_gpu_ms = 0.0
+        total_cortex_tokens = 0
+        total_reflex_gpu_ms = 0.0
         escalations_count = 0
         steps_log = []
 
@@ -113,16 +116,16 @@ Return ONLY a valid JSON object with format:
             inst = s.get("instruction", "")
             val = s.get("fill_value")
 
-            # Step A: Attempt via System 1 (DeBERTa NLI)
+            # Step A: Attempt via Reflex Core (DeBERTa NLI)
             step_res = await self.agent.execute_step(page=page, instruction=inst, fill_value=val)
-            total_system1_gpu_ms += step_res.get("latency_ms", 0.0)
+            total_reflex_gpu_ms += step_res.get("latency_ms", 0.0)
 
-            # Step B: If System 1 is uncertain -> escalate to System 2
+            # Step B: If Reflex Core is uncertain -> escalate to Cortex Engine
             if not step_res.get("executed"):
                 escalations_count += 1
-                print(f"     ⚠️ Escalation on step {idx+1} (\"{inst}\") -> invoking System 2...")
+                print(f"     ⚠️ Escalation on step {idx+1} (\"{inst}\") -> invoking Cortex Engine...")
 
-                # Retrieve fresh ARIA snapshot for System 2
+                # Retrieve fresh ARIA snapshot for Cortex
                 current_snapshot = await page.aria_snapshot()
                 candidates = AriaElementParser.parse_snapshot(
                     current_snapshot,
@@ -132,13 +135,13 @@ Return ONLY a valid JSON object with format:
                 if not candidates and val:
                     candidates = AriaElementParser.parse_snapshot(current_snapshot, max_candidates=50, require_input_only=False)
 
-                # System 2 resolves element
-                s2_help = self.call_system2_llm(intent=inst, candidates=candidates, aria_tree=current_snapshot, fill_value=val)
-                total_system2_tokens += s2_help.get("tokens", 0)
+                # Cortex Engine resolves element
+                cortex_help = self.call_cortex_llm(intent=inst, candidates=candidates, aria_tree=current_snapshot, fill_value=val)
+                total_cortex_tokens += cortex_help.get("tokens", 0)
 
-                chosen_name = s2_help.get("chosen_name", "")
-                chosen_ref = s2_help.get("chosen_ref", "")
-                print(f"     🧠 System 2 resolved: \"{chosen_name}\" ({chosen_ref}) in {s2_help.get('latency_ms')} ms (~{s2_help.get('tokens')} tok.)")
+                chosen_name = cortex_help.get("chosen_name", "")
+                chosen_ref = cortex_help.get("chosen_ref", "")
+                print(f"     🧠 Cortex resolved: \"{chosen_name}\" ({chosen_ref}) in {cortex_help.get('latency_ms')} ms (~{cortex_help.get('tokens')} tok.)")
 
                 # Match candidate
                 matched_cand = next(
@@ -160,7 +163,7 @@ Return ONLY a valid JSON object with format:
                                 await page.get_by_role(role, name=name_pattern).first.fill(val, timeout=5000)
                             except Exception:
                                 await page.locator("input, textarea").first.fill(val, timeout=4000)
-                            step_res["action_taken"] = f"fill('{val}') [assisted by System 2]"
+                            step_res["action_taken"] = f"fill('{val}') [assisted by Cortex]"
                         else:
                             try:
                                 await page.get_by_role(role, name=name_pattern).first.click(timeout=3500)
@@ -169,14 +172,15 @@ Return ONLY a valid JSON object with format:
                                     await page.get_by_role(role, name=name_pattern).first.click(timeout=2000, force=True)
                                 except Exception:
                                     await page.get_by_text(name_pattern, exact=False).first.click(timeout=3000, force=True)
-                            step_res["action_taken"] = "click() [assisted by System 2]"
+                            step_res["action_taken"] = "click() [assisted by Cortex]"
 
                         step_res["executed"] = True
+                        step_res["assisted_by_cortex"] = True
                         step_res["assisted_by_system2"] = True
                         step_res["error"] = None
                         await page.wait_for_timeout(1000)
                     except Exception as ex:
-                        step_res["error"] = f"Error after assistance: {ex}"
+                        step_res["error"] = f"Error after Cortex assistance: {ex}"
 
             steps_log.append(step_res)
 
@@ -192,8 +196,10 @@ Return ONLY a valid JSON object with format:
             "final_url": page.url,
             "final_title": await page.title(),
             "escalations_count": escalations_count,
-            "system2_tokens": total_system2_tokens,
-            "system1_gpu_ms": round(total_system1_gpu_ms, 2),
+            "cortex_tokens": total_cortex_tokens,
+            "reflex_gpu_ms": round(total_reflex_gpu_ms, 2),
+            "system2_tokens": total_cortex_tokens,
+            "system1_gpu_ms": round(total_reflex_gpu_ms, 2),
             "steps_executed": len([s for s in task_steps if s.get("executed")]),
             "steps_log": steps_log,
             "final_snapshot_summary": final_snapshot[:1500]

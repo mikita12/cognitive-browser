@@ -1,6 +1,6 @@
 # 🧱 Cognitive Browser – Standalone Container Microservice
 
-Autonomous, ultra-lightweight web navigation engine powered by **System 1 (Playwright ARIA Snapshot + DeBERTa-v3 NLI)** packaged inside a Docker container.
+Autonomous, ultra-lightweight web navigation engine powered by **Reflex Core (Playwright ARIA Snapshot + DeBERTa-v3 NLI)** packaged inside a Docker container.
 
 Designed as a self-contained, drop-in building block for any AI agent (via MCP), workflow automation platform (n8n, Make), or custom Python/Node.js application (via REST API).
 

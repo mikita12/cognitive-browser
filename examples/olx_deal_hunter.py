@@ -1,5 +1,5 @@
 """
-OLX Deal Hunter - Autonomous Bargain Hunter (ARIA + DeBERTa System 1).
+OLX Deal Hunter - Autonomous Bargain Hunter (ARIA + DeBERTa Reflex Core).
 Searches offers on OLX, filters accessories and broken items, ranks by price and semantics,
 and navigates directly into the best value deal to extract specifications.
 """
@@ -144,7 +144,7 @@ class OlxDealHunter:
             offer_list.sort(key=lambda x: x["price"])
             best_deal = offer_list[0]
 
-            print(f"\n🔥 TOP VALUE DEAL SELECTED BY SYSTEM 1:")
+            print(f"\n🔥 TOP VALUE DEAL SELECTED BY REFLEX CORE:")
             print(f"   Title: {best_deal['title']}")
             print(f"   Price: {best_deal['price']} PLN ({best_deal['price_raw']})")
 

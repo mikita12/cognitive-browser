@@ -1,4 +1,4 @@
-# Project: Agentic Decision Router (System 1 + System 2 in Playwright Automation)
+# Project: Cognitive Browser (Reflex Core + Cortex Engine in Playwright Automation)
 
 ## 1. Introduction and Research Problem
 
@@ -10,7 +10,7 @@ Modern autonomous web agents (built on frameworks like Playwright and directed b
 
 ## 2. Core Architectural Concept
 
-The architecture is inspired by dual-process cognitive theory: **System 1** (rapid, subconscious, zero-token reflex decisions) and **System 2** (deliberative, slower planning and complex reasoning).
+The architecture is inspired by dual-process cognitive theory: **Reflex Core** (rapid, subconscious, zero-token reflex decisions) and **Cortex Engine** (deliberative, slower planning and complex reasoning).
 
 Instead of piping raw page dumps directly into the primary LLM loop, we place a **local discriminative decision router** (DeBERTa-v3 NLI or fine-tuned cross-encoder) directly in front of the browser execution engine:
 
@@ -21,7 +21,7 @@ Instead of piping raw page dumps directly into the primary LLM loop, we place a 
                                  │
                                  ▼
                     ┌─────────────────────────┐
-                    │     System 1 Layer      │
+                    │    Reflex Core Layer    │
                     │ DeBERTa-v3 Cross-Encoder│ <── Sub-50ms parallel evaluation
                     └────────────┬────────────┘
                                  │
@@ -34,7 +34,7 @@ Instead of piping raw page dumps directly into the primary LLM loop, we place a 
        ┌───────────────────┐           ┌───────────────────┐
        │ Direct Playwright │           │ Compact Context   │
        │ Action in ~40 ms  │           │ to Primary LLM    │
-       │ [0 LLM TOKENS]    │           │ (System 2)        │
+       │ [0 LLM TOKENS]    │           │ (Cortex Engine)   │
        └───────────────────┘           └───────────────────┘
 ```
 
@@ -72,7 +72,7 @@ Instead of piping raw page dumps directly into the primary LLM loop, we place a 
 
 ## 5. Technology Stack & Implementation
 
-1. **System 1 (Discriminative Decision Model - DeBERTa-v3):**
+1. **Reflex Core (Discriminative Decision Model - DeBERTa-v3):**
    * Model: `cross-encoder/nli-deberta-v3-small` running natively in PyTorch on GPU (`cuda:0`), Apple Silicon (`mps`), or CPU.
    * Inference method: **Zero-Shot NLI (Softmax Entailment vs Contradiction)**.
    * Decision latency: **~39 ms**.
@@ -80,7 +80,7 @@ Instead of piping raw page dumps directly into the primary LLM loop, we place a 
 2. **Web Automation Engine:**
    * Playwright ARIA Snapshot extraction (`page.aria_snapshot()`).
    * Protection against hallucinated selectors: semantic ARIA role/name targeting.
-3. **System 2 (Primary Reasoning Engine):**
+3. **Cortex Engine (Primary Reasoning Engine):**
    * Engaged exclusively when `should_escalate = True` (confidence below threshold or obstruction encountered).
 
 ---

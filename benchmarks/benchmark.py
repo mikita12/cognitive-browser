@@ -2,7 +2,7 @@
 Benchmarking & Comparison Harness.
 Compares:
 1. Standard Agent Pattern: Full DOM snapshot sent to large cloud LLM prompt.
-2. System 1 Decision Router: Pruned candidates sent to local fast model pool.
+2. Reflex Core Decision Router: Pruned candidates sent to local fast model pool.
 """
 
 import asyncio
@@ -24,7 +24,7 @@ except ImportError:
 
 async def run_benchmark():
     print("=" * 70)
-    print("BENCHMARK: Traditional LLM Agent vs System 1 Decision Router")
+    print("BENCHMARK: Traditional LLM Agent vs Reflex Core Decision Router")
     print("=" * 70)
 
     test_url = "https://news.ycombinator.com/login"
@@ -50,9 +50,9 @@ async def run_benchmark():
         print(f"  -> Estimated API cost (Claude 3.5 Sonnet): ~${(approx_raw_tokens / 1_000_000) * 3.00:.4f} for this single step")
 
         # -------------------------------------------------------------
-        # Approach 2: System 1 Decision Router
+        # Approach 2: Reflex Core Decision Router
         # -------------------------------------------------------------
-        print(f"\n[3/4] METHOD B (Our System 1 Decision Router):")
+        print(f"\n[3/4] METHOD B (Our Reflex Core Decision Router):")
         t0 = time.perf_counter()
         candidates = await DomCandidateExtractor.extract_interactive_elements(page)
         extract_time = (time.perf_counter() - t0) * 1000
