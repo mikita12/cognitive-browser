@@ -108,21 +108,53 @@ class BrowserEngine:
 
     async def click_element(self, page: Page, role: str, name: str) -> bool:
         """Clicks an element using exact-match prioritizing to avoid substring collisions."""
-        clean_name = re.sub(r"[\ue000-\uf8ff]", "", name).strip()
+        clean_name = re.sub(r"[\ue000-\uf8ff\uf000-\uffff]|\\u[e-fE-F][0-9a-fA-F]{3}", "", name).strip()
         locator = None
 
-        if clean_name:
+        if clean_name and role:
             exact_pattern = re.compile(r"^\s*" + re.escape(clean_name) + r"\s*$", re.I)
-            exact_loc = page.get_by_role(role, name=exact_pattern).first  # type: ignore[arg-type]
             try:
+                exact_loc = page.get_by_role(role, name=exact_pattern).first  # type: ignore[arg-type]
                 if await exact_loc.count() > 0:
                     locator = exact_loc
             except Exception:
                 pass
 
+        if locator is None and clean_name and role:
+            try:
+                name_pattern = re.compile(re.escape(clean_name), re.I)
+                sub_loc = page.get_by_role(role, name=name_pattern).first  # type: ignore[arg-type]
+                if await sub_loc.count() > 0:
+                    locator = sub_loc
+            except Exception:
+                pass
+
+        # Fallback to alternative roles if the requested role was mismatched (e.g. link vs button)
+        if locator is None and clean_name:
+            alt_roles = ["button", "link", "tab", "menuitem"]
+            for alt_role in alt_roles:
+                if alt_role == role:
+                    continue
+                try:
+                    alt_pattern = re.compile(re.escape(clean_name), re.I)
+                    alt_loc = page.get_by_role(alt_role, name=alt_pattern).first  # type: ignore[arg-type]
+                    if await alt_loc.count() > 0:
+                        locator = alt_loc
+                        break
+                except Exception:
+                    pass
+
+        # Ultimate fallback: text search
+        if locator is None and clean_name:
+            try:
+                txt_loc = page.get_by_text(clean_name).first
+                if await txt_loc.count() > 0:
+                    locator = txt_loc
+            except Exception:
+                pass
+
         if locator is None:
-            name_pattern = re.compile(re.escape(clean_name), re.I) if clean_name else name
-            locator = page.get_by_role(role, name=name_pattern).first  # type: ignore[arg-type]
+            locator = page.get_by_text(name).first
 
         try:
             await locator.click(timeout=3500)

@@ -4,6 +4,7 @@ Autonomous web navigation combining local zero-token NLI (Reflex Core)
 with interactive agent-in-the-loop escalation (orchestrating LLM as Cortex).
 """
 
+import re
 import time
 from typing import Any, Dict, List, Optional
 
@@ -206,6 +207,14 @@ async def smart_action(
         chosen_candidate = None
         if target_ref and _last_candidates:
             chosen_candidate = next((c for c in _last_candidates if c.get("ref") == target_ref), None)
+
+        if not chosen_candidate and target_name and _last_candidates:
+            clean_tname = re.sub(r"[\ue000-\uf8ff\uf000-\uffff]|\\u[e-fE-F][0-9a-fA-F]{3}", "", target_name).strip().lower()
+            for c in _last_candidates:
+                cname = (c.get("name") or "").lower()
+                if clean_tname in cname or cname in clean_tname:
+                    chosen_candidate = c
+                    break
 
         if chosen_candidate:
             role = chosen_candidate["role"]
