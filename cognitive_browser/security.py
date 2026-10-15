@@ -196,6 +196,42 @@ def sanitize_untrusted_text(text: str, max_length: int = 150) -> str:
     return clean[:max_length].strip()
 
 
+def is_exempt_origin(url: str, exempt_origins: Optional[Set[str]]) -> bool:
+    """
+    Checks if a URL matches one of the exempt origins strictly by (scheme, hostname, port).
+    Prevents prefix attacks such as http://127.0.0.1:PORT.evil.com or http://127.0.0.1:PORT@evil.com.
+    """
+    if not exempt_origins or not url:
+        return False
+    try:
+        parsed_target = urllib.parse.urlsplit(url)
+        target_scheme = (parsed_target.scheme or "").lower()
+        target_host = (parsed_target.hostname or "").lower()
+        target_port = parsed_target.port
+        if target_port is None:
+            if target_scheme == "http":
+                target_port = 80
+            elif target_scheme == "https":
+                target_port = 443
+
+        for origin in exempt_origins:
+            parsed_origin = urllib.parse.urlsplit(origin)
+            origin_scheme = (parsed_origin.scheme or "").lower()
+            origin_host = (parsed_origin.hostname or "").lower()
+            origin_port = parsed_origin.port
+            if origin_port is None:
+                if origin_scheme == "http":
+                    origin_port = 80
+                elif origin_scheme == "https":
+                    origin_port = 443
+
+            if target_scheme == origin_scheme and target_host == origin_host and target_port == origin_port:
+                return True
+    except Exception:
+        return False
+    return False
+
+
 async def setup_ssrf_route_guard(
     target: Any,
     allow_private: Optional[bool] = None,
@@ -203,9 +239,9 @@ async def setup_ssrf_route_guard(
     exempt_origins: Optional[Set[str]] = None,
 ) -> None:
     """
-    Registers a route handler on a Playwright BrowserContext or Page to intercept
+    Registers route handlers on a Playwright BrowserContext or Page to intercept
     and validate every outgoing network request (main document, subresources, XHR,
-    fetch, and HTTP redirects) before dispatch.
+    fetch, HTTP redirects, and WebSockets) before dispatch.
     Requests to private networks, loopback addresses, or cloud metadata endpoints are aborted.
     """
     context = getattr(target, "context", target)
@@ -217,7 +253,7 @@ async def setup_ssrf_route_guard(
         url = req.url
 
         # Check if URL belongs to an explicitly exempt origin (used in test fixtures with local servers)
-        is_exempt = exempt_origins is not None and any(url.startswith(origin) for origin in exempt_origins)
+        is_exempt = is_exempt_origin(url, exempt_origins)
 
         if not is_exempt:
             try:
@@ -233,9 +269,7 @@ async def setup_ssrf_route_guard(
                 location = response.headers.get("location")
                 if location:
                     target_redirect_url = urllib.parse.urljoin(url, location)
-                    is_redirect_exempt = exempt_origins is not None and any(
-                        target_redirect_url.startswith(origin) for origin in exempt_origins
-                    )
+                    is_redirect_exempt = is_exempt_origin(target_redirect_url, exempt_origins)
                     if not is_redirect_exempt:
                         try:
                             validate_url(
@@ -252,3 +286,23 @@ async def setup_ssrf_route_guard(
             await route.abort("blockedbyclient")
 
     await context.route("**/*", _ssrf_route_interceptor)
+
+    # Intercept WebSockets if supported by context
+    if hasattr(context, "route_web_socket"):
+
+        async def _ssrf_ws_interceptor(ws: Any) -> None:
+            ws_url = ws.url
+            # Map websocket schemes to http/https for validation
+            http_url = ws_url.replace("ws://", "http://", 1).replace("wss://", "https://", 1)
+            is_exempt = is_exempt_origin(http_url, exempt_origins)
+            if not is_exempt:
+                try:
+                    validate_url(http_url, allow_private=allow_private, allowed_domains=allowed_domains)
+                    await ws.connect()
+                except SecurityError:
+                    await ws.close()
+                    return
+            else:
+                await ws.connect()
+
+        await context.route_web_socket("**/*", _ssrf_ws_interceptor)
