@@ -49,8 +49,15 @@ async def cognitive_browse(
     steps: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
-    Executes a multi-step web workflow autonomously using local Reflex NLI on GPU.
-    Executes entirely on GPU with 0 LLM tokens. The orchestrator LLM sleeps while Reflex runs.
+    [PRIMARY TOOL - STRONGLY RECOMMENDED FOR ALL WEB TASKS]
+    Executes a multi-step web workflow autonomously using local Reflex NLI (DeBERTa-v3 on GPU).
+    Executes entirely on GPU with 0 LLM tokens while you sleep.
+    ALWAYS prefer delegating the complete planned sequence of steps here in a single call instead of executing step-by-step with smart_action.
+
+    Workflow:
+    - Pass url and the full list of steps: [{"instruction": "Wpisz w wyszukiwarkę...", "fill_value": "..."}, {"instruction": "Kliknij Wyszukaj"}, {"instruction": "Kliknij w pierwszy wynik..."}]
+    - Reflex executes each step locally on GPU and returns status: "success" along with page_content_snippet of the final destination page.
+    - If confidence is ambiguous, it returns status: "clarification_needed" so you can provide updated steps without reloading.
 
     Args:
         url: Optional target web page URL to open. If omitted, continues execution on the currently active page.
@@ -206,9 +213,10 @@ async def smart_action(
     fill_value: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
+    [ESCALATION / FALLBACK ONLY - DO NOT USE FOR NORMAL WORKFLOWS]
     Executes a single action on the current active browser page.
-    Can either resolve the element via Reflex NLI automatically,
-    or execute directly on a target_ref / target_name chosen by the orchestrator.
+    CRITICAL: DO NOT use this tool in a loop for regular browsing! Use cognitive_browse(steps=[...]) instead to execute multi-step workflows with 0 tokens.
+    Only call smart_action if cognitive_browse explicitly returned status 'clarification_needed' and you need to manually resolve a single element via target_ref or target_name.
 
     Args:
         instruction: Natural language action goal.
@@ -310,7 +318,8 @@ async def get_aria_snapshot(
 ) -> Dict[str, Any]:
     """
     Returns the condensed Accessibility Tree (ARIA snapshot) of the current or specified page.
-    Includes readable semantic content (headings, paragraphs, text, lists) and interactive candidates.
+    Use ONLY for initial inspection of an unknown page to plan steps for cognitive_browse, or to read deep content from the final destination page.
+    CRITICAL: DO NOT call get_aria_snapshot repeatedly in a loop between actions. Use cognitive_browse to execute actions autonomously with 0 tokens.
     NEVER use read_url_content or fetch raw HTML; all page knowledge is present directly in this ARIA snapshot.
 
     Args:
