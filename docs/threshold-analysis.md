@@ -7,7 +7,9 @@ This document details the empirical trade-offs of varying the Reflex Core confid
 The table below reflects evaluation using `benchmarks/threshold_sweep.py` executed on NVIDIA GeForce RTX 4070 Ti (CUDA) using the `cross-encoder/nli-deberta-v3-small` checkpoint.
 
 > **Sample Size & Statistical Limitation Notice:**
-> The current evaluation corpus comprises **13 labeled offline task scenarios** (10 resolvable interactive steps, 3 impossible/unmatched adversarial cases) and **32 live interaction steps** from the 15-case benchmark. Because the sample size is modest (n = 13 offline, n = 32 live), these numbers should be interpreted as indicative calibration guidance rather than a universal guarantee. Further expansion of labeled benchmark fixtures is ongoing (TODO).
+> The current evaluation corpus comprises **13 labeled offline task scenarios** (10 resolvable interactive steps, 3 impossible/unmatched adversarial cases) and **32 live interaction steps** from the 15-case benchmark. Because the sample size is modest ($n = 13$ offline, $n = 32$ live), these numbers should be interpreted as indicative calibration guidance rather than a universal guarantee.
+> 
+> In particular, **thresholds 0.30 through 0.50 yield identical evaluation metrics** (F1 = 0.9474) on this evaluation set. At $n = 13$, a single example accounts for approximately $7.7\%$ of the metric; finer discrimination between thresholds in the 0.30–0.50 range requires a significantly larger labeled benchmark corpus (TODO). Further expansion of labeled benchmark fixtures is ongoing.
 
 | Threshold | Precision | Recall | F1 Score | Labeled Escalation % | Live Step Escalation % | True Pos (TP) | False Pos (FP) | False Neg (FN) | True Neg (TN) |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
