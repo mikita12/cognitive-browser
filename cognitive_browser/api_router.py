@@ -97,7 +97,7 @@ class ApiDecisionRouter:
 
         # Build Premise -> Hypothesis pairs
         hypothesis = f"This element represents, opens, or is used to {intent}."
-        pairs = []
+        pairs: List[Dict[str, Any]] = []
         for c in candidates[:40]:
             premise = (
                 f"Interactive web element: role: {c.get('role')}, name: '{c.get('name')}', text: '{c.get('text')}'."
@@ -146,7 +146,7 @@ class ApiDecisionRouter:
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         docs = [f"role: {c['role']}, name: {c['name']}, info: {c.get('text', '')}" for c in candidates[:50]]
 
-        payload = {
+        payload: Dict[str, Any] = {
             "model": self.model,
             "query": f"Find button or input to {intent}",
             "documents": docs,
@@ -197,7 +197,7 @@ Candidates:
 Output JSON ONLY: {{"chosen_ref": "aria-X", "confidence": 0.95}}
 """
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        payload = {
+        payload: Dict[str, Any] = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"},
