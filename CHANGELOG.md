@@ -15,17 +15,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Configurable Confidence Threshold**: Environment variable `COGNITIVE_BROWSER_CONFIDENCE_THRESHOLD` and programmatic configuration support.
 - **Security Protections**:
   - Strict URL scheme validation (HTTP/HTTPS only).
-  - SSRF protection: blocking loopback (127.0.0.0/8), private ranges (RFC 1918, RFC 4193), and cloud metadata endpoints (169.254.169.254) by default, with opt-in override `COGNITIVE_BROWSER_ALLOW_PRIVATE_NETWORKS`.
-  - Domain allowlisting via `COGNITIVE_BROWSER_ALLOWED_DOMAINS`.
-  - Sensitive value masking in logs and traces for credentials, API tokens, and passwords.
+  - SSRF protection: blocking loopback (127.0.0.0/8, `::1`), private ranges (RFC 1918, `fc00::/7`), link-local (`fe80::/10`), IPv4-mapped IPv6, and cloud metadata endpoints (169.254.169.254) by default, with opt-in override `ALLOW_PRIVATE_NETWORKS`.
+  - Post-navigation final landing URL verification against redirect SSRF attacks.
+  - Domain allowlisting via `ALLOWED_DOMAINS`.
+  - Sensitive value masking enabled by default in logs and telemetry, with opt-out via `DISABLE_FILL_MASKING=true`.
+  - API Token bearer authentication (`API_TOKEN`) for REST API and SSE on port 8000, with loopback binding (`127.0.0.1:8000`) in `docker-compose.yml`.
 - **Benchmarking Suite**:
+  - Real `@playwright/mcp` execution harness (`benchmarks/run_playwright_mcp_baseline.py`) supporting local Ollama and cloud LLMs.
+  - Consistent per-step Reflex inference latency percentiles (24.9 ms median, 64.6 ms p95).
   - Multi-run statistical reporting (`--runs N` with mean ± standard deviation).
-  - Offline local HTML fixtures mode (`--use-fixtures`) to evaluate workflows without live internet access.
-  - Threshold sweep evaluation utility (`benchmarks/threshold_sweep.py`).
+  - Offline local HTML fixtures mode (`--mode fixture`) to evaluate workflows without live internet access.
+  - Threshold sweep evaluation utility (`benchmarks/threshold_sweep.py`) with empirical precision/recall/escalation sweep across thresholds 0.30–0.90.
 - **Documentation**:
   - `docs/benchmark-methodology.md`: Complete accounting rules, ReAct baseline simulation disclosure, and benchmark limits.
+  - `docs/threshold-analysis.md`: Empirical threshold calibration and trade-off analysis.
   - `docs/architecture.md`: Single-page architectural walkthrough with accurate Mermaid diagrams.
-  - `docs/threat-model.md` and `SECURITY.md`: Vulnerability reporting process and threat mitigations.
+  - `docs/threat-model.md` and `SECURITY.md`: Vulnerability reporting process and threat mitigations (including DNS rebinding limits and prompt injection disclosures).
+  - `docs/demo.md`: Step-by-step terminal demo GIF recording guide.
 - **Developer Tooling & CI**:
   - Ruff linter and formatter configuration.
   - Mypy static type checking across core library and test suite.
@@ -34,4 +40,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Standardized architecture naming: renamed legacy System 1 / System 2 concepts to Reflex Core and Cortex Engine.
 - Replaced legacy root entrypoints `mcp_server.py` and `server.py` with thin deprecation shims pointing to `cognitive_browser.mcp_server` and `cognitive_browser.server`.
+- Replaced subjective comparison ratings with an objective, neutral comparison table and explicit user requirements.
 - Translated all repository code comments and documentation to English.
