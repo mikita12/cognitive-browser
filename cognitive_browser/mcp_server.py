@@ -19,7 +19,7 @@ SERVER_INSTRUCTIONS = (
     "## Autonomous Plan-and-Delegate Paradigm (Zero Cloud Tokens):\n"
     "1. PLANNING: Inspect initial page state with `get_aria_snapshot(url=...)` or formulate a complete multi-step plan upfront.\n"
     "2. DELEGATION: Send the complete sequence of actions to `cognitive_browse(url=..., steps=[...])`. Reflex Core executes the entire plan locally on GPU in seconds with ZERO LLM tokens. DO NOT turn-by-turn micromanage; the LLM sleeps while Reflex executes.\n"
-    "3. ESCALATION & PLAN UPDATE: If Reflex encounters ambiguity (confidence < threshold), execution pauses and returns `clarification_needed` with `completed_steps` and `top_candidates`. The LLM wakes up, updates the remaining plan, and calls `cognitive_browse(steps=[...])` (without reloading) or `smart_action` to seamlessly resume autonomous execution on the current page.\n"
+    "3. ESCALATION & PLAN UPDATE: If Reflex encounters ambiguity (confidence < threshold), execution pauses and returns `clarification_needed` with `completed_steps` and `top_candidates`. The LLM wakes up, can call `get_aria_snapshot()` (without url) to inspect the active DOM state if needed, updates the remaining plan, and calls `cognitive_browse(steps=[...])` (without reloading) or `smart_action` to seamlessly resume autonomous execution on the current page.\n"
     "4. COMPLETION: When steps finish, `cognitive_browse` returns `status: 'success'` along with `page_content_snippet` (the destination page content). Synthesize your final answer in a single turn. NEVER read raw HTML or call `read_url_content`."
 )
 
@@ -318,13 +318,16 @@ async def get_aria_snapshot(
 ) -> Dict[str, Any]:
     """
     Returns the condensed Accessibility Tree (ARIA snapshot) of the current or specified page.
-    Use ONLY for initial inspection of an unknown page to plan steps for cognitive_browse, or to read deep content from the final destination page.
-    CRITICAL: DO NOT call get_aria_snapshot repeatedly in a loop between actions. Use cognitive_browse to execute actions autonomously with 0 tokens.
+    Primary use cases:
+    1. Initial inspection: Inspect an unknown page before starting to formulate a multi-step plan for cognitive_browse.
+    2. Escalation & recovery: When cognitive_browse returns 'clarification_needed' or an action behaves unexpectedly, call get_aria_snapshot() without reloading to inspect the active state and reformulate the plan.
+    3. Final deep read: Extract deep content or specific sections (using selector e.g. 'main') from the destination page.
+    CRITICAL: DO NOT call get_aria_snapshot repeatedly in a loop between actions for step-by-step navigation. Use cognitive_browse to execute actions autonomously with 0 tokens.
     NEVER use read_url_content or fetch raw HTML; all page knowledge is present directly in this ARIA snapshot.
 
     Args:
-        url: Optional target URL to open before capturing snapshot. If omitted, captures current active page.
-        max_candidates: Maximum number of interactive candidates to extract for smart_action.
+        url: Optional target URL to open before capturing snapshot. If omitted, captures current active page without reloading.
+        max_candidates: Maximum number of interactive candidates to extract.
         selector: CSS selector to scope snapshot (e.g. 'main', 'article', or 'body'). Default 'body'.
         include_aria_tree: Whether to include the readable ARIA YAML tree text. Default True.
         max_tree_lines: Max lines of ARIA YAML tree to return to keep token usage low. Default 150.
