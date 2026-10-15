@@ -2,6 +2,9 @@
 """
 Wroclaw Pizza Delivery Hunter - powered by Agentic Decision Router (Reflex Core + ARIA Snapshot).
 Rapid verification of local pizzerias with dedicated online delivery systems.
+
+DISCLAIMER: For educational and testing purposes only. Users must respect third-party
+restaurant sites' Terms of Service, robots.txt, and avoid excessive request rates.
 """
 
 import asyncio

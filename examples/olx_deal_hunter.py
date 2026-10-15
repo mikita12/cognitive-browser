@@ -2,6 +2,9 @@
 OLX Deal Hunter - Autonomous Bargain Hunter (ARIA + DeBERTa Reflex Core).
 Searches offers on OLX, filters accessories and broken items, ranks by price and semantics,
 and navigates directly into the best value deal to extract specifications.
+
+DISCLAIMER: For educational and testing purposes only. Users must respect OLX Terms of Service,
+robots.txt guidelines, and avoid aggressive request volumes or bot-shield circumvention.
 """
 
 import asyncio
