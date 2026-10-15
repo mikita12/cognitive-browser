@@ -5,6 +5,7 @@ via both REST API and Model Context Protocol (MCP) for AI agents.
 """
 
 import os
+import secrets
 import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
@@ -113,7 +114,7 @@ async def verify_api_token_middleware(request: Request, call_next):
         elif "token" in request.query_params:
             token = request.query_params.get("token", "").strip()
 
-        if not token or token != token_configured:
+        if not token or not secrets.compare_digest(token, token_configured):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Unauthorized: Missing or invalid API token."},

@@ -3,6 +3,7 @@ Unit tests for Cognitive Browser FastAPI REST API and authentication controls.
 """
 
 import os
+import secrets
 import unittest
 from unittest.mock import patch
 
@@ -53,6 +54,12 @@ class TestServerAPI(unittest.TestCase):
             resp_query = self.client.get(f"/v1/mcp/tools?token={secret_token}")
             self.assertEqual(resp_query.status_code, 200)
             self.assertIn("tools", resp_query.json())
+
+            # 6. Verify constant-time comparison via secrets.compare_digest
+            with patch("secrets.compare_digest", wraps=secrets.compare_digest) as mock_digest:
+                resp_mock = self.client.get("/v1/mcp/tools", headers={"Authorization": f"Bearer {secret_token}"})
+                self.assertEqual(resp_mock.status_code, 200)
+                mock_digest.assert_called_once_with(secret_token, secret_token)
 
 
 if __name__ == "__main__":
