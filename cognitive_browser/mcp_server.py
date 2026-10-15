@@ -41,14 +41,19 @@ def get_services() -> tuple[ReflexCore, BrowserEngine]:
 @mcp.tool()
 async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Executes a multi-step web workflow autonomously.
-    Routine steps are resolved locally via Reflex Core (DeBERTa-v3 on GPU) in ~25ms with 0 LLM tokens.
-    If an element is ambiguous or confidence falls below threshold, execution pauses and returns
-    'clarification_needed' with candidate elements so you can resolve the next action.
+    Executes a multi-step web workflow autonomously in a single turn.
+
+    CRITICAL RULES FOR AGENTS:
+    1. NEVER call this tool with empty steps (`"steps": []`).
+    2. DO NOT perform manual turn-by-turn ReAct loops by inspecting snapshots after every step.
+    3. Formulate the COMPLETE sequence of steps upfront in the `steps` list.
+       Example: [{"instruction": "Search input", "fill_value": "news"}, {"instruction": "Search submit button"}, {"instruction": "first result link"}]
+    4. Routine steps execute locally on GPU via Reflex Core (~25ms/step, ZERO cloud tokens) in ~3-5 seconds total.
+    5. Only if the result status is 'clarification_needed' should you intervene to resolve the ambiguous step with `smart_action`.
 
     Args:
         url: Target web page URL to open.
-        steps: List of action steps, e.g. [{"instruction": "Search query input", "fill_value": "Playwright"}, {"instruction": "Search submit button"}]
+        steps: List of action steps with 'instruction' (and optional 'fill_value').
     """
     global _last_candidates
     validated_url = validate_url(url)
