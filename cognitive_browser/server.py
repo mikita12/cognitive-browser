@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from .agent_core import AgentCore, AriaElementParser
 from .deberta_router import DebertaDecisionRouter
-from .security import SecurityError, mask_sensitive_value, validate_url
+from .security import SecurityError, mask_sensitive_value, setup_ssrf_route_guard, validate_url
 
 # Environment configuration
 MODEL_NAME = os.getenv("MODEL_NAME", "cross-encoder/nli-deberta-v3-small")
@@ -192,6 +192,7 @@ async def take_aria_snapshot(req: SnapshotRequest):
 
     t0 = time.perf_counter()
     page = await browser_instance.new_page()
+    await setup_ssrf_route_guard(page.context)
     try:
         await page.goto(clean_url, wait_until="domcontentloaded", timeout=req.wait_time_ms + 10000)
         await page.wait_for_timeout(req.wait_time_ms)
@@ -231,6 +232,7 @@ async def execute_browse_task(req: BrowseTaskRequest):
 
     t0 = time.perf_counter()
     page = await browser_instance.new_page()
+    await setup_ssrf_route_guard(page.context)
     steps_log = []
 
     try:

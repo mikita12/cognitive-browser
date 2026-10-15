@@ -18,7 +18,7 @@ from playwright.async_api import Browser, async_playwright
 from .agent_core import AgentCore, AriaElementParser
 from .agent_orchestrator import AgentOrchestrator
 from .router_factory import get_decision_router
-from .security import validate_url
+from .security import setup_ssrf_route_guard, validate_url
 
 # Initialize MCP server
 mcp = MCPServer("cognitive-browser")
@@ -69,6 +69,7 @@ async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, A
     validated_url = validate_url(url)
     router, agent, browser, orchestrator = await get_services()
     page = await browser.new_page()
+    await setup_ssrf_route_guard(page.context)
 
     try:
         res = await orchestrator.execute_task(page=page, url=validated_url, steps=steps)
@@ -112,6 +113,7 @@ async def get_aria_snapshot(url: str, max_candidates: int = 40) -> Dict[str, Any
     t_start = time.perf_counter()
     router, agent, browser, _ = await get_services()
     page = await browser.new_page()
+    await setup_ssrf_route_guard(page.context)
     try:
         await page.goto(validated_url, wait_until="domcontentloaded", timeout=20000)
         await page.wait_for_timeout(1000)
@@ -154,6 +156,7 @@ async def smart_action(url: str, instruction: str, fill_value: Optional[str] = N
     t_start = time.perf_counter()
     router, agent, browser, _ = await get_services()
     page = await browser.new_page()
+    await setup_ssrf_route_guard(page.context)
     try:
         await page.goto(validated_url, wait_until="domcontentloaded", timeout=20000)
         await page.wait_for_timeout(1000)

@@ -15,8 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Configurable Confidence Threshold**: Environment variable `COGNITIVE_BROWSER_CONFIDENCE_THRESHOLD` and programmatic configuration support.
 - **Security Protections**:
   - Strict URL scheme validation (HTTP/HTTPS only).
-  - SSRF protection: blocking loopback (127.0.0.0/8, `::1`), private ranges (RFC 1918, `fc00::/7`), link-local (`fe80::/10`), IPv4-mapped IPv6, and cloud metadata endpoints (169.254.169.254) by default, with opt-in override `ALLOW_PRIVATE_NETWORKS`.
-  - Post-navigation final landing URL verification against redirect SSRF attacks.
+  - Request-level SSRF route guard (`context.route("**/*")`) intercepting main documents, subresources, XHR/fetch, and HTTP redirect hops to abort connections to private/loopback/metadata endpoints before dispatch.
   - Domain allowlisting via `ALLOWED_DOMAINS`.
   - Sensitive value masking enabled by default in logs and telemetry, with opt-out via `DISABLE_FILL_MASKING=true`.
   - API Token bearer authentication (`API_TOKEN`) for REST API and SSE on port 8000, with loopback binding (`127.0.0.1:8000`) in `docker-compose.yml`.
