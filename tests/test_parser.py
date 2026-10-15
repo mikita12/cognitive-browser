@@ -55,6 +55,17 @@ class TestAriaElementParser(unittest.TestCase):
         for role in roles:
             self.assertIn(role, {"textbox", "searchbox", "combobox"})
 
+    def test_pua_icon_stripping(self):
+        snapshot_with_icons = """
+- main:
+  - button "\ue0c3 Wyszukaj"
+  - button "Zakładanie firmy \uea23"
+"""
+        candidates = AriaElementParser.parse_snapshot(snapshot_with_icons)
+        self.assertEqual(len(candidates), 2)
+        self.assertEqual(candidates[0]["name"], "Wyszukaj")
+        self.assertEqual(candidates[1]["name"], "Zakładanie firmy")
+
 
 if __name__ == "__main__":
     unittest.main()
