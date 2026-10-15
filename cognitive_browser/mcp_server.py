@@ -78,16 +78,20 @@ async def cognitive_browse(
     # If no steps provided, load page and return initial ARIA state for orchestrator to formulate plan
     if not steps:
         snapshot_yaml = await page.aria_snapshot()
-        candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=50)
+        candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=25)
         _last_candidates = candidates
+        lines = snapshot_yaml.splitlines()
+        tree_snippet = "\n".join(lines[:100])
+        if len(lines) > 100:
+            tree_snippet += f"\n... (and {len(lines) - 100} more lines)"
         return {
             "status": "ready_for_plan",
             "current_url": page.url,
             "current_title": await page.title(),
             "candidates_count": len(candidates),
             "candidates": candidates,
-            "aria_tree": snapshot_yaml,
-            "message": "Page loaded. Please formulate the complete plan (list of steps) for DeBERTa to execute autonomously.",
+            "aria_tree": tree_snippet,
+            "message": "Page loaded. Formulate the complete plan (list of steps) for DeBERTa to execute autonomously in cognitive_browse.",
             "execution_seconds": round(time.perf_counter() - t_start, 2),
         }
 
