@@ -1,60 +1,60 @@
-# 🧠 Cognitive Browser MCP
+# Cognitive Browser MCP
 
+[![CI](https://github.com/mikita12/cognitive-browser/actions/workflows/ci.yml/badge.svg)](https://github.com/mikita12/cognitive-browser/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![MCP Standard 2.x](https://img.shields.io/badge/MCP-Standard%202.x-green.svg)](https://modelcontextprotocol.io)
-[![Token Reduction](https://img.shields.io/badge/Tokens-98.9%25%20Saved-brightgreen.svg)]()
-[![Execution Speedup](https://img.shields.io/badge/Speedup-3.9x%20Faster-orange.svg)]()
 
-> **Cognitive Browser** is a dual-system (Reflex Core + Cortex Engine) autonomous web browser agent and official **Model Context Protocol (MCP)** server.
-> It replaces slow, token-devouring Playwright MCP servers by executing multi-step web navigation through **local reflex models (DeBERTa-v3 NLI)** in ~40 ms with **0 LLM tokens**, while reserving full LLM reasoning (Cortex Engine) only when escalations or ambiguous dialogues occur.
+Cognitive Browser is an autonomous web browser agent and Model Context Protocol (MCP) server. It executes multi-step web navigation workflows by combining a local discriminative cross-encoder (**Reflex Core**) with selective generative LLM escalation (**Cortex Engine**).
+
+By resolving routine element interactions through Natural Language Inference (NLI) rather than streaming raw HTML or full DOM trees to generative models on every step, it minimizes prompt token overhead and reduces execution latency during repetitive interactions.
 
 ---
 
-## ⚡ The Benchmark: 15 Real-World Web Tasks
+## Benchmark: 15-Case Web Automation Evaluation
 
-Tested on 15 live web applications across transportation, e-commerce, forms, marketplaces, and civic portals to **100% full task completion**:
+> **Methodology Notice:**
+> The metrics below reflect execution of pre-scripted multi-step workflows across 15 web applications. Upstream planning tokens (the initial formulation of the step sequence by an external agent) are **not included**. Baseline figures for standard Playwright MCP are derived from an analytical ReAct simulation model. For complete hardware specifications, model configurations, and token accounting rules, read [docs/benchmark-methodology.md](docs/benchmark-methodology.md).
 
-| Metric | Base Playwright MCP (`@playwright/mcp`) | **Cognitive Browser MCP** | Improvement |
+| Metric | Simulated Baseline ReAct Agent | Cognitive Browser (Reflex + Cortex) | Measured Difference |
 |---|:---:|:---:|:---:|
-| **Token Consumption** | 382,980 tokens | **4,222 tokens** | **-98.9% LESS TOKENS** |
-| **Average Task Latency** | 19.73 s | **5.12 s** | **3.9x FASTER** |
-| **Reflex Core Decision Speed** | N/A (Full LLM call ~3.2 s) | **~30–60 ms (GPU/MPS)** | **~70x Faster Decision** |
-| **Task Completion Rate** | 15 / 15 (100%) | **15 / 15 (100%)** | **100% Parity** |
+| **Interaction Token Consumption** | ~382,980 tokens | 4,222 tokens | Significant token reduction on routine steps |
+| **Average Task Duration** | ~19.73 s (simulated network) | 5.12 s (local GPU) | Reduced step latency via local routing |
+| **Reflex Core Decision Latency** | N/A (Cloud LLM call ~2–4 s) | ~25–120 ms (CUDA) / ~200–450 ms (CPU) | Sub-second local decision loop |
+| **Task Completion on Test Set** | 15 / 15 | 15 / 15 | Parity on predefined step benchmark |
 
-*(Full benchmark telemetry available in [`benchmarks/benchmark_15_cases_results.json`](benchmarks/benchmark_15_cases_results.json))*.
+*(Benchmark run data available in [`benchmarks/benchmark_15_cases_results.json`](benchmarks/benchmark_15_cases_results.json))*.
 
 ---
 
-## 🏗️ Architecture: Dual-Process Cognitive Loop
+## Architecture
 
-Standard AI browser agents feed raw HTML or massive ARIA snapshots into a cloud LLM ReAct loop on **every single step**, burning 20k–80k tokens per task. Cognitive Browser splits browser automation into two distinct tiers:
+Standard browser agents feed accessibility snapshots or raw HTML into a cloud LLM reasoning loop on every turn. Cognitive Browser divides automation into two distinct tiers:
 
 ```mermaid
 flowchart TD
-    User["Agent / User Intent"] --> Nav["Browser Navigation & Auto-Dismiss Consent"]
-    Nav --> Snapshot["Condensed ARIA Accessibility Tree (~98% smaller than HTML)"]
+    User["Agent / Pre-scripted Step List"] --> Nav["Browser Navigation & Overlay Auto-Dismiss"]
+    Nav --> Snapshot["Accessibility Tree (ARIA Snapshot)"]
     
-    Snapshot --> S1["⚡ Reflex Core: DeBERTa-v3 Cross-Encoder NLI (Local GPU / Apple MPS / CPU)"]
+    Snapshot --> Reflex["Reflex Core: DeBERTa-v3 NLI Cross-Encoder\n(Local GPU / MPS / CPU)"]
     
-    S1 -- "High Confidence (> 0.50)" --> Exec["Direct Playwright Action (fill / click) in ~40 ms\n[0 LLM TOKENS CONSUMED]"]
+    Reflex -- "Confidence >= Threshold (default: 0.50)" --> Exec["Direct Playwright Action\n(fill / click) in ~25-120 ms"]
     
-    S1 -- "Ambiguity / Modal / Conflict (< 0.50)" --> S2["🧠 Cortex Engine: LLM Escalation (Ollama / Cloud LLM)"]
-    S2 -->|"Resolves element & assists Reflex"| Exec
+    Reflex -- "Confidence < Threshold or Unmatched" --> Cortex["Cortex Engine: LLM Escalation\n(Ollama / Cloud LLM)"]
+    Cortex -->|"Resolves candidate element"| Exec
     
-    Exec -->|"Verify next step"| Next["Next Step / 100% Task Completion"]
+    Exec -->|"Next step"| Next["Next Step / Completion"]
 ```
 
-1. **Reflex Core**: `cross-encoder/nli-deberta-v3-small` (140M params) evaluates candidates using Zero-Shot Natural Language Inference (`premise` = interactive element, `hypothesis` = user intent).
-2. **Cortex Engine**: When low confidence or an unexpected modal dialog occurs, Cortex Engine steps in with compact context (~400 tokens) to unblock the agent.
-3. **Rock-Solid DOM Locators**:
-   - Universal cookie / GDPR auto-dismissal (OneTrust, Didomi, Klaro).
-   - Unicode font-icon normalization (`\ue000-\uf8ff` stripping).
-   - Semantic input filtering (`require_input_only` on text fills).
+1. **Reflex Core**: Evaluates interactive candidates using Zero-Shot Natural Language Inference (`cross-encoder/nli-deberta-v3-small`, 140M parameters) where the premise is candidate metadata (role, name, text) and the hypothesis is the user's step intent.
+2. **Cortex Engine**: When confidence falls below the configured threshold (`REFLEX_CONFIDENCE_THRESHOLD`, default `0.50`) or when no suitable element is found, Cortex inspects the condensed candidate list with an LLM to resolve ambiguities.
+3. **DOM Locator Strategy**:
+   - Heuristic cookie and consent overlay auto-dismissal.
+   - Unicode icon character normalization (`\ue000-\uf8ff` stripping).
+   - Input role filtering (`require_input_only` for text fill operations).
 
 ---
 
-## 🚀 Quickstart
+## Quickstart
 
 ### 1. Installation
 
@@ -62,16 +62,13 @@ flowchart TD
 git clone https://github.com/mikita12/cognitive-browser.git
 cd cognitive-browser
 
-# Install package in editable mode (installs CLI tools: cognitive-browser & cognitive-browser-api)
 pip install -e .
 playwright install chromium
 ```
 
 ### 2. Run as MCP Server
 
-Connect directly to **Claude Desktop**, **Cursor IDE**, or **Antigravity CLI**:
-
-Add to your MCP configuration (`claude_desktop_config.json` or `~/.gemini/config/mcp_config.json`):
+Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_config.json` or Antigravity `mcp_config.json`):
 
 ```json
 {
@@ -83,94 +80,84 @@ Add to your MCP configuration (`claude_desktop_config.json` or `~/.gemini/config
   }
 }
 ```
-*(Or use `cognitive-browser` directly if installed in your environment, or `["python", "/path/to/cognitive-browser/mcp_server.py"]`)*.
 
-### 3. Run with Docker (One-Liner)
+Or run via the installed console script:
+```bash
+cognitive-browser
+```
+
+### 3. Run as Docker Microservice
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
-The FastAPI REST API and MCP server will be live on `http://localhost:8000`.
+The FastAPI REST endpoint and SSE MCP server will be accessible on `http://localhost:8000`.
 
 ---
 
-## 🎛️ Router Modes: Local Free vs Zero-GPU Cloud
+## Router Modes: Local vs Cloud
 
-Cognitive Browser adapts to your hardware via [`cognitive_browser.router_factory`](cognitive_browser/router_factory.py):
+The router selection is configured via environment variables or explicit parameters:
 
-| Mode | Trigger | Hardware | Cost | Description |
-|---|---|---|:---:|---|
-| **Local DeBERTa** *(Default)* | *Automatic* | NVIDIA CUDA, Apple Silicon (MPS), or CPU | **$0.00** | 100% offline, Zero LLM tokens. |
-| **Hugging Face Cloud** | `export HF_TOKEN=...` | Any 512MB VPS (No PyTorch required) | **$0.00** | Hosted DeBERTa-v3 NLI serverless API. |
-| **Cohere Rerank** | `export COHERE_API_KEY=...` | Any VPS | Pay-per-call | Cloud cross-encoder ranking. |
-| **Groq / OpenAI** | `export GROQ_API_KEY=...` | Any VPS | Pay-per-token | Fast JSON decision fallback. |
+| Mode | Trigger | Requirements | Characteristics |
+|---|---|---|---|
+| **Local DeBERTa** *(Default)* | Automatic | CUDA, Apple MPS, or CPU | 100% offline, 0 LLM tokens, free. |
+| **Hugging Face Inference** | `HF_TOKEN=...` | Internet connection | Serverless cross-encoder API. |
+| **Cohere Rerank** | `COHERE_API_KEY=...` | Internet connection | Cloud cross-encoder reranking. |
+| **Groq / OpenAI** | `GROQ_API_KEY=...` | Internet connection | Fast JSON LLM selection fallback. |
 
 ---
 
-## 🛠️ MCP Tools Exposed
+## MCP Tools
 
 1. **`cognitive_browse(url, steps)`**:
-   - Executes multi-step workflows autonomously in 4–6 seconds.
-   - Returns structured execution logs and precision telemetry:
-     ```json
-     {
-       "status": "success",
-       "final_url": "https://koleo.pl/...",
-       "telemetry": {
-         "total_execution_seconds": 5.09,
-         "reflex_gpu_inference_ms": 219.3,
-         "cortex_llm_tokens": 0,
-         "steps_completed": 3
-       }
-     }
-     ```
-2. **`get_aria_snapshot(url)`**:
-   - Extracts a clean, semantic ARIA accessibility tree (98% smaller than raw HTML).
-3. **`smart_action(url, instruction, fill_value)`**:
-   - Atomic single-step action evaluated by the decision router.
+   - Executes multi-step workflows autonomously with Reflex decisions and Cortex escalation.
+   - Returns execution logs and structured telemetry (`total_execution_seconds`, `reflex_gpu_inference_ms`, `cortex_llm_tokens`).
+2. **`get_aria_snapshot(url, max_candidates=40)`**:
+   - Extracts a structured semantic Accessibility tree (filtering decorative HTML).
+3. **`smart_action(url, instruction, fill_value=None)`**:
+   - Evaluates and executes an atomic single action (click or fill).
 
 ---
 
-## 🧪 Testing
+## Limitations
 
-Run the test suite:
+- **Single Page Applications (SPAs):** Pages with slow client-side hydration, dynamic virtual scrolling, or canvas-rendered interfaces may present incomplete accessibility trees.
+- **iframes and Shadow DOM:** Cross-origin iframes cannot be traversed by top-level accessibility trees without frame switching. Closed shadow roots are hidden from standard DOM traversals.
+- **Authentication & CAPTCHAs:** Cognitive Browser does not solve Cloudflare challenges, Google reCAPTCHA, or multi-factor authentication puzzles.
+- **High-Confidence Reflex Errors:** As a cross-encoder model, DeBERTa may occasionally assign high confidence to an incorrect element if multiple elements share ambiguous naming. Setting `REFLEX_CONFIDENCE_THRESHOLD` higher (e.g. `0.65`) encourages safer escalation to Cortex.
+- **Pre-scripted vs Open-Ended Navigation:** Cognitive Browser executes step sequences; formulating the high-level plan from an open-ended goal requires an upstream LLM agent.
+
+---
+
+## Comparison with Related Projects
+
+| Project | Approach | Best For | Trade-offs |
+|---|---|---|---|
+| **Cognitive Browser** | Dual-tier (local NLI cross-encoder + selective LLM escalation) | Cost-sensitive workflows, high-throughput form filling, structured MCP tools | Requires structured steps; no native vision model |
+| **browser-use** | Full cloud vision LLM in an open-ended ReAct loop | Complex, visually-guided exploratory navigation | High token consumption and cost per task; higher step latency |
+| **Stagehand** | TypeScript SDK with targeted AI extraction and action primitives | Node.js developers building custom scraping and automation scripts | Generative LLM invocations per action; requires API keys |
+| **Playwright MCP** | Low-level browser automation tools called individually by agent | Granular control by an external LLM orchestrator | Accumulates large conversation context over multi-turn tasks |
+
+---
+
+## Security
+
+Cognitive Browser handles untrusted web content and executes browser interactions:
+- **SSRF Protection:** By default, private IP ranges (RFC 1918), loopback addresses, and cloud metadata endpoints (`169.254.169.254`) are blocked.
+- **Sensitive Data Masking:** Input values in `fill_value` operations can be masked in logs and telemetry to prevent credential exposure.
+- For vulnerability reporting and full threat model analysis, see [SECURITY.md](SECURITY.md) and [docs/threat-model.md](docs/threat-model.md).
+
+---
+
+## Development & Testing
+
+Run unit tests:
 ```bash
-python -m unittest discover tests
+pytest tests/ -v
 ```
 
----
-
-## 📂 Project Structure
-
+Run offline fixture benchmark:
+```bash
+python benchmarks/run_15_cases_benchmark.py --mode fixture --runs 2
 ```
-cognitive-browser/
-├── cognitive_browser/         # Core Python package
-│   ├── __init__.py            # Clean exports (AgentCore, DeBERTa, Orchestrator)
-│   ├── agent_core.py          # ARIA parser, DOM actions, cookie auto-dismissal
-│   ├── agent_orchestrator.py  # Dual-tier Reflex Core + Cortex Engine active escalation loop
-│   ├── deberta_router.py      # Local DeBERTa-v3 NLI cross-encoder (CUDA/MPS/CPU)
-│   ├── api_router.py          # Cloud cross-encoders (Hugging Face / Cohere / LLM)
-│   ├── router_factory.py      # Dynamic hardware/API selection engine
-│   ├── mcp_server.py          # Official Model Context Protocol (MCP) server
-│   └── server.py              # FastAPI REST microservice
-├── tests/                     # Automated unit test suite
-│   ├── test_imports.py        # Import and export contract verification
-│   ├── test_parser.py         # ARIA parser & URL extractor tests
-│   └── test_router_factory.py # Cloud vs local router factory tests
-├── benchmarks/                # 15-case benchmark scripts & telemetry datasets
-├── examples/                  # Automation recipes (OLX, Food Delivery, Wikipedia)
-├── docs/                      # Architecture whitepapers & container guides
-├── .github/workflows/         # CI/CD automated test pipeline
-├── pyproject.toml             # Modern PEP 621 packaging & console scripts
-├── requirements.txt           # Production dependencies
-├── Dockerfile                 # GPU-accelerated container
-├── docker-compose.yml         # Container orchestration
-├── mcp_server.py              # Backward-compatible MCP entrypoint shim
-└── server.py                  # Backward-compatible REST API entrypoint shim
-```
-
----
-
-## 📄 License
-
-Licensed under the [MIT License](LICENSE).
