@@ -11,8 +11,10 @@ from typing import List, Dict, Any, Optional
 from playwright.async_api import Page, async_playwright
 try:
     from .deberta_router import DebertaDecisionRouter
+    from .security import mask_sensitive_value
 except ImportError:
     from deberta_router import DebertaDecisionRouter
+    from security import mask_sensitive_value
 
 
 class AriaElementParser:
@@ -211,9 +213,11 @@ class AgentCore:
                 if role in ["combobox", "textbox", "searchbox", "spinbutton"]:
                     locator = page.get_by_role(role, name=name_pattern).first
                     await locator.fill(fill_value, timeout=5000)
-                    step_info["action_taken"] = f"fill('{fill_value}')"
+                    masked_val = mask_sensitive_value(fill_value, instruction=instruction)
+                    step_info["action_taken"] = f"fill('{masked_val}')"
                 else:
-                    step_info["error"] = f"Selected element of role [{role}], which does not accept text input fill_value='{fill_value}'"
+                    masked_val = mask_sensitive_value(fill_value, instruction=instruction)
+                    step_info["error"] = f"Selected element of role [{role}], which does not accept text input fill_value='{masked_val}'"
                     self.execution_log.append(step_info)
                     return step_info
             else:
