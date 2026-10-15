@@ -14,14 +14,20 @@ from .browser import BrowserEngine
 from .reflex import AriaElementParser, ReflexCore
 from .security import mask_sensitive_value, validate_url
 
+SERVER_INSTRUCTIONS = (
+    "Cognitive Browser is a high-speed, zero-token browser automation server powered by local Reflex NLI (DeBERTa-v3 on GPU/CPU).\n\n"
+    "## Strict Knowledge & Content Extraction Rules:\n"
+    "1. NEVER call `read_url_content` or fetch raw HTML. Raw HTML pages are bloated with CSS, JS, and trackers, burning millions of tokens.\n"
+    "   Cognitive Browser provides 100% of the page's knowledge, article text, headings, and interactive elements through clean ARIA snapshots.\n"
+    "2. Reading Page Content: `cognitive_browse` automatically returns `page_content_snippet` containing the main headings and article text of the final destination page.\n"
+    "   To inspect full or detailed article text, call `get_aria_snapshot(selector='main')` or `get_aria_snapshot(selector='body')`. The returned `aria_tree` contains all headings, paragraphs, and list items in clean, compact YAML format.\n"
+    "3. Automated Navigation & Interaction: Execute planned multi-step navigation using `cognitive_browse(url=..., steps=[...])`.\n"
+    "   Routine clicks and form inputs are executed in sub-50ms with 0 tokens. If Reflex Core encounters ambiguity or confidence is below threshold, it returns 'clarification_needed' with `top_candidates`. Inspect the candidates and call `smart_action` to complete the action."
+)
+
 mcp = MCPServer(
     "cognitive-browser",
-    instructions=(
-        "Cognitive Browser is a high-speed, token-efficient browser automation server. "
-        "It uses a local NLI model (Reflex Core) to execute routine clicks and form inputs with zero LLM tokens. "
-        "When Reflex encounters ambiguous elements or confidence drops below threshold, it returns "
-        "'clarification_needed' with top element candidates so you (the orchestrator) can resolve the choice."
-    ),
+    instructions=SERVER_INSTRUCTIONS,
 )
 
 # Shared singleton services
