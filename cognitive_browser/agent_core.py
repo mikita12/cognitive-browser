@@ -9,7 +9,10 @@ import time
 import re
 from typing import List, Dict, Any, Optional
 from playwright.async_api import Page, async_playwright
-from deberta_router import DebertaDecisionRouter
+try:
+    from .deberta_router import DebertaDecisionRouter
+except ImportError:
+    from deberta_router import DebertaDecisionRouter
 
 
 class AriaElementParser:
@@ -33,12 +36,18 @@ class AriaElementParser:
         lines = snapshot_yaml.splitlines()
         for idx, line in enumerate(lines):
             clean = line.strip()
-            if not clean.startswith("-") or clean.startswith("- /url:"):
+            if not clean.startswith("-"):
+                continue
+
+            # Jeśli linia to url dla poprzedniego linku
+            if clean.startswith("- /url:") and candidates:
+                u = clean.replace("- /url:", "").strip().strip('"').strip("'")
+                candidates[-1]["url"] = u
                 continue
 
             # Jeśli linia to placeholder dla poprzedniego elementu
             if clean.startswith("- /placeholder:") and candidates:
-                ph = clean.replace("- /placeholder:", "").strip()
+                ph = clean.replace("- /placeholder:", "").strip().strip('"').strip("'")
                 candidates[-1]["placeholder"] = ph
                 candidates[-1]["text"] = f"{candidates[-1]['text']} (placeholder: {ph})"
                 continue
@@ -89,7 +98,10 @@ class AgentCore:
         if router is not None:
             self.router = router
         else:
-            from router_factory import get_decision_router
+            try:
+                from .router_factory import get_decision_router
+            except ImportError:
+                from router_factory import get_decision_router
             self.router = get_decision_router(device=device)
         self.execution_log = []
 

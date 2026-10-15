@@ -6,8 +6,12 @@ Automatycznie dobiera optymalny router w zależności od konfiguracji i sprzętu
 import os
 from typing import Optional, Union
 
-from deberta_router import DebertaDecisionRouter
-from api_router import ApiDecisionRouter
+try:
+    from .deberta_router import DebertaDecisionRouter
+    from .api_router import ApiDecisionRouter
+except ImportError:
+    from deberta_router import DebertaDecisionRouter
+    from api_router import ApiDecisionRouter
 
 
 def get_decision_router(

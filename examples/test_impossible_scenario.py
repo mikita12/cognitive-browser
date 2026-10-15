@@ -12,8 +12,11 @@ import asyncio
 import time
 import json
 from playwright.async_api import async_playwright
-from agent_core import AgentCore, AriaElementParser
-from deberta_router import DebertaDecisionRouter
+try:
+    from cognitive_browser import AgentCore, AriaElementParser, DebertaDecisionRouter
+except ImportError:
+    from agent_core import AgentCore, AriaElementParser
+    from deberta_router import DebertaDecisionRouter
 
 
 async def run_impossible_stress_test():

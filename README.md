@@ -62,8 +62,8 @@ flowchart TD
 git clone https://github.com/mikita12/cognitive-browser.git
 cd cognitive-browser
 
-# Install dependencies (Playwright + PyTorch + MCP SDK)
-pip install -r requirements.txt
+# Install package in editable mode (installs CLI tools: cognitive-browser & cognitive-browser-api)
+pip install -e .
 playwright install chromium
 ```
 
@@ -78,11 +78,12 @@ Add to your MCP configuration (`claude_desktop_config.json` or `~/.gemini/config
   "mcpServers": {
     "cognitive-browser": {
       "command": "python",
-      "args": ["/path/to/cognitive-browser/mcp_server.py"]
+      "args": ["-m", "cognitive_browser.mcp_server"]
     }
   }
 }
 ```
+*(Or use `cognitive-browser` directly if installed in your environment, or `["python", "/path/to/cognitive-browser/mcp_server.py"]`)*.
 
 ### 3. Run with Docker (One-Liner)
 
@@ -95,7 +96,7 @@ The FastAPI REST API and MCP server will be live on `http://localhost:8000`.
 
 ## 🎛️ Router Modes: Local Free vs Zero-GPU Cloud
 
-Cognitive Browser adapts to your hardware via [`router_factory.py`](router_factory.py):
+Cognitive Browser adapts to your hardware via [`cognitive_browser.router_factory`](cognitive_browser/router_factory.py):
 
 | Mode | Trigger | Hardware | Cost | Description |
 |---|---|---|:---:|---|
@@ -130,22 +131,42 @@ Cognitive Browser adapts to your hardware via [`router_factory.py`](router_facto
 
 ---
 
+## 🧪 Testing
+
+Run the test suite:
+```bash
+python -m unittest discover tests
+```
+
+---
+
 ## 📂 Project Structure
 
 ```
 cognitive-browser/
-├── agent_core.py          # ARIA parser, DOM actions, cookie auto-dismissal
-├── agent_orchestrator.py  # Dual-tier System 1 + System 2 active escalation loop
-├── deberta_router.py      # Local DeBERTa-v3 NLI cross-encoder (CUDA/MPS/CPU)
-├── api_router.py          # Cloud cross-encoders (Hugging Face / Cohere / LLM)
-├── router_factory.py      # Dynamic hardware/API selection engine
-├── mcp_server.py          # Official Model Context Protocol (MCP) server
-├── server.py              # FastAPI REST server
-├── Dockerfile             # Container definition (CUDA-ready)
-├── docker-compose.yml     # Docker compose service setup
-├── benchmarks/            # 15-case benchmark scripts and telemetry datasets
-├── examples/              # Automation recipes (OLX, Food Delivery, Wikipedia)
-└── docs/                  # Architecture whitepapers and container guides
+├── cognitive_browser/         # Core Python package
+│   ├── __init__.py            # Clean exports (AgentCore, DeBERTa, Orchestrator)
+│   ├── agent_core.py          # ARIA parser, DOM actions, cookie auto-dismissal
+│   ├── agent_orchestrator.py  # Dual-tier System 1 + System 2 active escalation loop
+│   ├── deberta_router.py      # Local DeBERTa-v3 NLI cross-encoder (CUDA/MPS/CPU)
+│   ├── api_router.py          # Cloud cross-encoders (Hugging Face / Cohere / LLM)
+│   ├── router_factory.py      # Dynamic hardware/API selection engine
+│   ├── mcp_server.py          # Official Model Context Protocol (MCP) server
+│   └── server.py              # FastAPI REST microservice
+├── tests/                     # Automated unit test suite
+│   ├── test_imports.py        # Import and export contract verification
+│   ├── test_parser.py         # ARIA parser & URL extractor tests
+│   └── test_router_factory.py # Cloud vs local router factory tests
+├── benchmarks/                # 15-case benchmark scripts & telemetry datasets
+├── examples/                  # Automation recipes (OLX, Food Delivery, Wikipedia)
+├── docs/                      # Architecture whitepapers & container guides
+├── .github/workflows/         # CI/CD automated test pipeline
+├── pyproject.toml             # Modern PEP 621 packaging & console scripts
+├── requirements.txt           # Production dependencies
+├── Dockerfile                 # GPU-accelerated container
+├── docker-compose.yml         # Container orchestration
+├── mcp_server.py              # Backward-compatible MCP entrypoint shim
+└── server.py                  # Backward-compatible REST API entrypoint shim
 ```
 
 ---

@@ -47,8 +47,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 4. Instalacja silnika przeglądarki Chromium w Playwrighcie
 RUN playwright install chromium
 
-# 5. Kopiowanie kodu źródłowego
-COPY deberta_router.py agent_core.py extractor.py server.py /app/
+# 5. Kopiowanie kodu źródłowego i instalacja pakietu
+COPY pyproject.toml /app/
+COPY cognitive_browser/ /app/cognitive_browser/
+COPY mcp_server.py server.py /app/
+RUN pip install --no-cache-dir -e .
 
 # Tworzenie katalogu na sesje
 RUN mkdir -p /data/browser_sessions
@@ -58,4 +61,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "cognitive_browser.server:app", "--host", "0.0.0.0", "--port", "8000"]

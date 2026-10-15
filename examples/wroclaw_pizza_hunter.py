@@ -8,9 +8,13 @@ import asyncio
 import time
 import json
 from typing import List, Dict, Any
+import os
 from playwright.async_api import async_playwright
-from agent_core import AriaElementParser
-from deberta_router import DebertaDecisionRouter
+try:
+    from cognitive_browser import AriaElementParser, DebertaDecisionRouter
+except ImportError:
+    from agent_core import AriaElementParser
+    from deberta_router import DebertaDecisionRouter
 
 
 # Baza kandydatów: pizzerie we Wrocławiu posiadające własne domeny WWW
@@ -197,7 +201,8 @@ async def verify_pizzerias():
     print("📊 PODSUMOWANIE ZWERYFIKOWANYCH PIZZERII WE WROCŁAWIU")
     print("=" * 80)
 
-    with open("/home/mikita/Desktop/agentic-decision-router/wroclaw_pizzerias_report.json", "w", encoding="utf-8") as f:
+    output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wroclaw_pizzerias_report.json")
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
 
     for r in results:
