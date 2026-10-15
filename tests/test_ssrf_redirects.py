@@ -10,6 +10,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
 
+from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import async_playwright
 
 from cognitive_browser.security import SecurityError, is_exempt_origin, setup_ssrf_route_guard, validate_url
@@ -254,7 +255,7 @@ class TestSSRFRedirectGuards(unittest.IsolatedAsyncioTestCase):
 
                 return await original_route(pattern, wrapped_handler)
 
-            context.route = route_spy
+            setattr(context, "route", route_spy)
 
             # Run production setup_ssrf_route_guard
             await setup_ssrf_route_guard(context, exempt_origins={self.base_url})
@@ -301,8 +302,10 @@ class TestSSRFRedirectGuards(unittest.IsolatedAsyncioTestCase):
             await setup_ssrf_route_guard(context, exempt_origins={self.base_url})
             page = await context.new_page()
 
-            with self.assertRaises(Exception):
+            with self.assertRaises(PlaywrightError) as ctx:
                 await page.goto(f"{self.base_url}/multi-hop-loopback-1", timeout=5000)
+
+            self.assertIn("ERR_BLOCKED_BY_CLIENT", str(ctx.exception))
 
             self.assertEqual(
                 InternalSecretHandler.hits,
