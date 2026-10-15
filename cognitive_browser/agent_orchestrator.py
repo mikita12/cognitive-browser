@@ -176,21 +176,32 @@ Return ONLY a valid JSON object with format:
                         clean_name = re.sub(r"[\ue000-\uf8ff]", "", name).strip()
                         name_pattern = re.compile(re.escape(clean_name), re.I) if clean_name else name
 
+                        locator = None
+                        if clean_name:
+                            exact_pattern = re.compile(r"^\s*" + re.escape(clean_name) + r"\s*$", re.I)
+                            exact_loc = page.get_by_role(role, name=exact_pattern).first
+                            try:
+                                if await exact_loc.count() > 0:
+                                    locator = exact_loc
+                            except Exception:
+                                pass
+
+                        if locator is None:
+                            locator = page.get_by_role(role, name=name_pattern).first
+
                         if val and role in ["combobox", "textbox", "searchbox", "spinbutton"]:
                             try:
-                                await page.get_by_role(role, name=name_pattern).first.fill(val, timeout=5000)
+                                await locator.fill(val, timeout=5000)
                             except Exception:
                                 await page.locator("input, textarea").first.fill(val, timeout=4000)
                             masked_val = mask_sensitive_value(val, instruction=inst)
                             step_res["action_taken"] = f"fill('{masked_val}') [assisted by Cortex]"
                         else:
                             try:
-                                await page.get_by_role(role, name=name_pattern).first.click(timeout=3500)
+                                await locator.click(timeout=3500)
                             except Exception:
                                 try:
-                                    await page.get_by_role(role, name=name_pattern).first.click(
-                                        timeout=2000, force=True
-                                    )
+                                    await locator.click(timeout=2000, force=True)
                                 except Exception:
                                     await page.get_by_text(name_pattern, exact=False).first.click(
                                         timeout=3000, force=True
