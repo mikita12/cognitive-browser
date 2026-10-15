@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from cognitive_browser.mcp_server import cognitive_browse, smart_action
+from cognitive_browser.mcp_server import cognitive_browse, get_aria_snapshot, smart_action
 
 
 @pytest.mark.anyio
@@ -94,3 +94,32 @@ async def test_smart_action_resolves_via_orchestrator_choice():
         assert res["target"] == "[link] Comments"
         assert res["current_url"] == "https://news.ycombinator.com/item?id=123"
         mock_engine.click_element.assert_awaited_once_with(mock_page, role="link", name="Comments")
+
+
+@pytest.mark.anyio
+async def test_get_aria_snapshot_returns_semantic_tree():
+    """Verify get_aria_snapshot returns both candidates and readable ARIA YAML tree without HTML overhead."""
+    mock_reflex = MagicMock()
+    mock_engine = MagicMock()
+    mock_page = MagicMock()
+    mock_page.url = "https://example.com/guide"
+    mock_page.title = AsyncMock(return_value="Guide Page")
+
+    mock_locator = MagicMock()
+    mock_locator.count = AsyncMock(return_value=1)
+    mock_locator.aria_snapshot = AsyncMock(
+        return_value="- main:\n  - heading \"How to Register a Company\" [level=1]\n  - paragraph: Fill CEIDG-1 online.\n  - button \"Apply\""
+    )
+    mock_page.locator.return_value = mock_locator
+    mock_engine.get_page = AsyncMock(return_value=mock_page)
+
+    with patch("cognitive_browser.mcp_server.get_services", return_value=(mock_reflex, mock_engine)):
+        res = await get_aria_snapshot(selector="main", include_aria_tree=True)
+
+        assert res["current_url"] == "https://example.com/guide"
+        assert res["candidates_count"] == 1
+        assert res["candidates"][0]["role"] == "button"
+        assert res["candidates"][0]["name"] == "Apply"
+        assert "aria_tree" in res
+        assert "How to Register a Company" in res["aria_tree"]
+        assert "Fill CEIDG-1 online" in res["aria_tree"]

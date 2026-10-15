@@ -146,7 +146,7 @@ async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, A
             }
 
     t_total = time.perf_counter() - t_start
-    return {
+    result: Dict[str, Any] = {
         "status": "success",
         "final_url": page.url,
         "final_title": await page.title(),
@@ -158,6 +158,22 @@ async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, A
         },
         "steps_log": steps_log,
     }
+
+    # Extract compact semantic ARIA snippet of final page so caller can read content with zero extra tool calls
+    try:
+        main_loc = page.locator("main")
+        if await main_loc.count() == 0:
+            main_loc = page.locator("body")
+        raw_aria = await main_loc.aria_snapshot()
+        lines = raw_aria.splitlines()
+        if len(lines) > 80:
+            result["page_content_snippet"] = "\n".join(lines[:80]) + f"\n... (and {len(lines) - 80} more lines. Call get_aria_snapshot for full tree)"
+        else:
+            result["page_content_snippet"] = raw_aria
+    except Exception:
+        pass
+
+    return result
 
 
 @mcp.tool()
@@ -255,27 +271,53 @@ async def smart_action(
 
 
 @mcp.tool()
-async def get_aria_snapshot(max_candidates: int = 40) -> Dict[str, Any]:
+async def get_aria_snapshot(
+    max_candidates: int = 40,
+    selector: str = "body",
+    include_aria_tree: bool = True,
+    max_tree_lines: int = 150,
+) -> Dict[str, Any]:
     """
     Returns the condensed Accessibility Tree (ARIA snapshot) of the current page.
-    98% smaller than raw HTML, capturing strictly interactive candidates.
+    Includes readable semantic content (headings, paragraphs, text, lists) and interactive candidates.
+    NEVER use read_url_content or fetch raw HTML; all page knowledge is present directly in this ARIA snapshot.
+
+    Args:
+        max_candidates: Maximum number of interactive candidates to extract for smart_action.
+        selector: CSS selector to scope snapshot (e.g. 'main', 'article', or 'body'). Default 'body'.
+        include_aria_tree: Whether to include the readable ARIA YAML tree text. Default True.
+        max_tree_lines: Max lines of ARIA YAML tree to return to keep token usage low. Default 150.
     """
     global _last_candidates
     _, engine = get_services()
     page = await engine.get_page()
 
     t_start = time.perf_counter()
-    snapshot_yaml = await page.aria_snapshot()
+    loc = page.locator(selector)
+    if await loc.count() == 0:
+        loc = page.locator("body")
+
+    snapshot_yaml = await loc.aria_snapshot()
     candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=max_candidates)
     _last_candidates = candidates
 
-    return {
+    res: Dict[str, Any] = {
         "current_url": page.url,
         "current_title": await page.title(),
         "candidates_count": len(candidates),
         "candidates": candidates,
         "execution_seconds": round(time.perf_counter() - t_start, 2),
     }
+
+    if include_aria_tree:
+        lines = snapshot_yaml.splitlines()
+        if len(lines) > max_tree_lines:
+            truncated = "\n".join(lines[:max_tree_lines])
+            res["aria_tree"] = f"{truncated}\n... (truncated {len(lines) - max_tree_lines} remaining lines. Increase max_tree_lines or use selector e.g. 'main' to view more)"
+        else:
+            res["aria_tree"] = snapshot_yaml
+
+    return res
 
 
 def main():

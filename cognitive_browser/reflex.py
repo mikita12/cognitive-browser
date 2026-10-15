@@ -69,6 +69,11 @@ class AriaElementParser:
             text_val = (m.group(3) or "").strip()
             label = name if name else text_val
 
+            # Strip Private Use Area (PUA) font icons (both raw unicode and literal \\u escapes)
+            clean_label = re.sub(r"[\ue000-\uf8ff\uf000-\uffff]|\\u[e-fE-F][0-9a-fA-F]{3}", "", label).strip()
+            if clean_label:
+                label = clean_label
+
             if require_input_only and role not in ["textbox", "combobox", "searchbox", "spinbutton"]:
                 continue
 
@@ -179,20 +184,78 @@ class ReflexCore:
 
         latency_ms = (time.perf_counter() - start_time) * 1000
 
+        # Lexical stem and role-matching boost
+        def _compute_lexical_boost(intent_str: str, cand_role: str, cand_name: str) -> float:
+            intent_lower = intent_str.lower()
+            name_lower = (cand_name or "").lower()
+            role_lower = (cand_role or "").lower()
+
+            boost = 0.0
+
+            # 1. Role keyword matching
+            wants_button = any(w in intent_lower for w in ["przycisk", "guzik", "button", "btn", "submit"])
+            wants_link = any(w in intent_lower for w in ["link", "odnośnik", "href"])
+            wants_input = any(w in intent_lower for w in ["pole", "wpisz", "tekst", "textbox", "input", "wyszukiwark", "searchbox"])
+
+            if wants_button:
+                if role_lower == "button":
+                    boost += 0.08
+                else:
+                    boost -= 0.15
+            elif wants_link:
+                if role_lower == "link":
+                    boost += 0.08
+                else:
+                    boost -= 0.15
+            elif wants_input:
+                if role_lower in ["textbox", "searchbox", "combobox"]:
+                    boost += 0.08
+                else:
+                    boost -= 0.15
+
+            # 2. Token / stem matching between intent and element name
+            intent_words = set(re.findall(r"\w{3,}", intent_lower))
+            name_words = set(re.findall(r"\w{3,}", name_lower))
+
+            stop_words = {"lub", "oraz", "dla", "sie", "się", "jest", "albo", "przez", "jego", "pod", "nad", "the", "and", "for", "with"}
+            meaningful_intent = {w for w in intent_words if w not in stop_words}
+            meaningful_name = {w for w in name_words if w not in stop_words}
+
+            def check_stems(w1: str, w2: str) -> bool:
+                min_len = min(len(w1), len(w2))
+                if min_len >= 4:
+                    return w1[:4] == w2[:4] or (w1[:min_len - 1] == w2[:min_len - 1])
+                return w1 in w2 or w2 in w1
+
+            stem_matches = 0
+            for iw in meaningful_intent:
+                if any(check_stems(iw, nw) for nw in meaningful_name):
+                    stem_matches += 1
+
+            if stem_matches > 0:
+                boost += min(0.20, stem_matches * 0.10)
+            elif len(meaningful_intent) > 0 and len(meaningful_name) > 0:
+                boost -= 0.05
+
+            return boost
+
         scored_candidates: List[Dict[str, Any]] = []
         for i, c in enumerate(candidates):
-            score = float(binary_probs[i].item())
+            raw_score = float(binary_probs[i].item())
+            boost = _compute_lexical_boost(intent, c.get("role") or "", c.get("name") or "")
+            unclamped_score = raw_score + boost
             scored_candidates.append(
                 {
                     "ref": c.get("ref", "NONE"),
                     "role": c.get("role"),
                     "name": c.get("name"),
                     "url": c.get("url"),
-                    "confidence_score": float(round(score, 4)),
+                    "_sort_score": unclamped_score,
+                    "confidence_score": float(round(max(0.0, min(1.0, unclamped_score)), 4)),
                 }
             )
 
-        scored_candidates.sort(key=lambda x: float(x.get("confidence_score") or 0.0), reverse=True)
+        scored_candidates.sort(key=lambda x: float(x.get("_sort_score") or 0.0), reverse=True)
         best = scored_candidates[0]
         best_score = float(best["confidence_score"])
 
