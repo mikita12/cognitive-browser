@@ -10,24 +10,22 @@ class TestPackageImports(unittest.TestCase):
         import cognitive_browser
 
         self.assertTrue(hasattr(cognitive_browser, "__version__"))
-        self.assertEqual(cognitive_browser.__version__, "0.1.0")
+        self.assertEqual(cognitive_browser.__version__, "0.2.0")
 
     def test_core_classes_exported(self):
         from cognitive_browser import (
             AgentCore,
-            AgentOrchestrator,
-            ApiDecisionRouter,
             AriaElementParser,
+            BrowserEngine,
             DebertaDecisionRouter,
-            get_decision_router,
+            ReflexCore,
         )
 
-        self.assertIsNotNone(DebertaDecisionRouter)
-        self.assertIsNotNone(ApiDecisionRouter)
-        self.assertIsNotNone(get_decision_router)
-        self.assertIsNotNone(AgentCore)
+        self.assertIsNotNone(ReflexCore)
+        self.assertIsNotNone(BrowserEngine)
         self.assertIsNotNone(AriaElementParser)
-        self.assertIsNotNone(AgentOrchestrator)
+        self.assertIsNotNone(DebertaDecisionRouter)
+        self.assertIsNotNone(AgentCore)
 
 
 if __name__ == "__main__":

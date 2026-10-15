@@ -17,8 +17,8 @@ from fastapi.responses import JSONResponse
 from playwright.async_api import Browser, async_playwright
 from pydantic import BaseModel, Field
 
-from .agent_core import AgentCore, AriaElementParser
-from .deberta_router import DebertaDecisionRouter
+from .browser import BrowserEngine
+from .reflex import AriaElementParser, ReflexCore
 from .security import SecurityError, mask_sensitive_value, setup_ssrf_route_guard, validate_url
 
 # Environment configuration
@@ -46,15 +46,15 @@ except Exception:
     os.makedirs(SESSION_DIR, exist_ok=True)
 
 # Global instances
-router_instance: Optional[DebertaDecisionRouter] = None
-agent_instance: Optional[AgentCore] = None
+router_instance: Optional[ReflexCore] = None
+engine_instance: Optional[BrowserEngine] = None
 playwright_manager = None
 browser_instance: Optional[Browser] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global router_instance, agent_instance, playwright_manager, browser_instance
+    global router_instance, engine_instance, playwright_manager, browser_instance
     print(f"\n🚀 [CognitiveBrowser] Starting server on device: {DEVICE.upper()}...")
 
     if not os.getenv("API_TOKEN", "").strip():
@@ -64,8 +64,8 @@ async def lifespan(app: FastAPI):
         print("🔒 [CognitiveBrowser] API token authentication enabled.")
 
     # Initialize NLI model
-    router_instance = DebertaDecisionRouter(model_name=MODEL_NAME, device=DEVICE)
-    agent_instance = AgentCore(model_name=MODEL_NAME, device=DEVICE)
+    router_instance = ReflexCore(model_name=MODEL_NAME, device=DEVICE)
+    engine_instance = BrowserEngine(reflex=router_instance)
 
     # Initialize Playwright
     playwright_manager = await async_playwright().start()
@@ -199,8 +199,8 @@ async def take_aria_snapshot(req: SnapshotRequest):
         await page.wait_for_timeout(req.wait_time_ms)
 
         # Auto-dismiss cookie overlays if present
-        if agent_instance:
-            await agent_instance.auto_dismiss_overlays(page)
+        if engine_instance:
+            await engine_instance.auto_dismiss_overlays(page)
 
         snapshot_yaml = await page.aria_snapshot()
         candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=req.max_candidates)
@@ -228,13 +228,13 @@ async def execute_browse_task(req: BrowseTaskRequest):
     except SecurityError as se:
         raise HTTPException(status_code=400, detail=str(se)) from se
 
-    if not browser_instance or not agent_instance:
+    if not browser_instance or not engine_instance or not router_instance:
         raise HTTPException(status_code=503, detail="Browser or agent engine is not ready")
 
     t0 = time.perf_counter()
     page = await browser_instance.new_page(service_workers="block")
     await setup_ssrf_route_guard(page.context)
-    steps_log = []
+    steps_log: List[Dict[str, Any]] = []
 
     try:
         print(f"\n[BrowseTask] Navigating to: {clean_url}")
@@ -242,7 +242,7 @@ async def execute_browse_task(req: BrowseTaskRequest):
         await page.wait_for_timeout(1000)
 
         # Step 0: Auto-dismiss cookies/consent modals
-        dismissed = await agent_instance.auto_dismiss_overlays(page)
+        dismissed = await engine_instance.auto_dismiss_overlays(page)
         if dismissed:
             steps_log.append({"step": "auto_dismiss_cookies", "status": "dismissed"})
 
@@ -251,11 +251,26 @@ async def execute_browse_task(req: BrowseTaskRequest):
             for s in req.steps:
                 masked_fill = mask_sensitive_value(s.fill_value, instruction=s.instruction)
                 print(f'  -> Step: "{s.instruction}" (fill: {masked_fill})')
-                res = await agent_instance.execute_step(page=page, instruction=s.instruction, fill_value=s.fill_value)
-                steps_log.append(res)
-                if not res.get("executed"):
-                    print(f"  ⚠️ Stopped at step: {res.get('error')}")
+
+                snapshot_yaml = await page.aria_snapshot()
+                candidates = AriaElementParser.parse_snapshot(
+                    snapshot_yaml, max_candidates=50, require_input_only=bool(s.fill_value)
+                )
+                decision = router_instance.evaluate_candidates(intent=s.instruction, candidates=candidates)
+                if decision.get("should_escalate") or decision.get("target_ref") == "NONE":
+                    steps_log.append({"instruction": s.instruction, "executed": False, "error": "Escalation needed"})
                     break
+
+                best = decision["ranked_candidates"][0]
+                if s.fill_value:
+                    await engine_instance.fill_element(page, role=best["role"], name=best["name"], value=s.fill_value)
+                else:
+                    await engine_instance.click_element(page, role=best["role"], name=best["name"])
+
+                await page.wait_for_timeout(500)
+                steps_log.append(
+                    {"instruction": s.instruction, "executed": True, "target": f"[{best['role']}] {best['name']}"}
+                )
 
         # Final snapshot after execution
         current_snapshot = await page.aria_snapshot()
