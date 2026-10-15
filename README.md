@@ -125,7 +125,7 @@ The router selection is configured via environment variables or explicit paramet
 - **Single Page Applications (SPAs):** Pages with slow client-side hydration, dynamic virtual scrolling, or canvas-rendered interfaces may present incomplete accessibility trees.
 - **iframes and Shadow DOM:** Cross-origin iframes cannot be traversed by top-level accessibility trees without frame switching. Closed shadow roots are hidden from standard DOM traversals.
 - **Authentication & CAPTCHAs:** Cognitive Browser does not solve Cloudflare challenges, Google reCAPTCHA, or multi-factor authentication puzzles.
-- **High-Confidence Reflex Errors:** As a cross-encoder model, DeBERTa may occasionally assign high confidence to an incorrect element if multiple elements share ambiguous naming. Setting `REFLEX_CONFIDENCE_THRESHOLD` higher (e.g. `0.65`) encourages safer escalation to Cortex.
+- **Reflex Threshold Tuning:** Setting `REFLEX_CONFIDENCE_THRESHOLD` higher increases the rate of Cortex LLM escalations (spending more tokens and time in exchange for generative verification on borderline matches), while lower thresholds prioritize local zero-token execution. See [docs/threshold-analysis.md](docs/threshold-analysis.md) for empirical sweep data across thresholds.
 - **Pre-scripted vs Open-Ended Navigation:** Cognitive Browser executes step sequences; formulating the high-level plan from an open-ended goal requires an upstream LLM agent.
 
 ---
