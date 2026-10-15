@@ -51,7 +51,7 @@ class TestAgentCoreAndOrchestrator(unittest.IsolatedAsyncioTestCase):
             "tool_action": "click()",
             "should_escalate": False,
             "latency_ms": 15.0,
-            "ranked_candidates": [{"role": "button", "name": "Submit", "ref": "aria-1"}]
+            "ranked_candidates": [{"role": "button", "name": "Submit", "ref": "aria-1"}],
         }
 
         agent = AgentCore(router=self.mock_router, confidence_threshold=0.50)
@@ -70,7 +70,7 @@ class TestAgentCoreAndOrchestrator(unittest.IsolatedAsyncioTestCase):
             "tool_action": "escalate",
             "should_escalate": True,
             "latency_ms": 12.0,
-            "ranked_candidates": []
+            "ranked_candidates": [],
         }
 
         agent = AgentCore(router=self.mock_router, confidence_threshold=0.50)
@@ -90,7 +90,7 @@ class TestAgentCoreAndOrchestrator(unittest.IsolatedAsyncioTestCase):
                 "tool_action": "click",
                 "should_escalate": conf < confidence_threshold,
                 "latency_ms": 10.0,
-                "ranked_candidates": [{"role": "button", "name": "Submit", "ref": "aria-1"}]
+                "ranked_candidates": [{"role": "button", "name": "Submit", "ref": "aria-1"}],
             }
 
         self.mock_router.evaluate_candidates.side_effect = fake_eval
@@ -110,7 +110,7 @@ class TestAgentCoreAndOrchestrator(unittest.IsolatedAsyncioTestCase):
             "tool_action": "click",
             "should_escalate": False,
             "latency_ms": 10.0,
-            "ranked_candidates": [{"role": "button", "name": "Submit", "ref": "aria-1"}]
+            "ranked_candidates": [{"role": "button", "name": "Submit", "ref": "aria-1"}],
         }
 
         agent = AgentCore(router=self.mock_router)
@@ -128,25 +128,26 @@ class TestAgentCoreAndOrchestrator(unittest.IsolatedAsyncioTestCase):
             "tool_action": "escalate",
             "should_escalate": True,
             "latency_ms": 20.0,
-            "ranked_candidates": []
+            "ranked_candidates": [],
         }
 
         orchestrator = AgentOrchestrator(router=self.mock_router)
-        # Mock Cortex LLM resolution
-        orchestrator.call_cortex_llm = MagicMock(return_value={
-            "chosen_ref": "aria-1",
-            "chosen_name": "Submit",
-            "action": "click",
-            "tokens": 180,
-            "latency_ms": 150.0
-        })
-
         page = self._create_mock_page(self.sample_snapshot)
-        task_res = await orchestrator.execute_task(
-            page=page,
-            url="https://example.com/checkout",
-            steps=[{"instruction": "Submit checkout form"}]
-        )
+
+        with patch.object(
+            orchestrator,
+            "call_cortex_llm",
+            return_value={
+                "chosen_ref": "aria-1",
+                "chosen_name": "Submit",
+                "action": "click",
+                "tokens": 180,
+                "latency_ms": 150.0,
+            },
+        ):
+            task_res = await orchestrator.execute_task(
+                page=page, url="https://example.com/checkout", steps=[{"instruction": "Submit checkout form"}]
+            )
 
         self.assertEqual(task_res["status"], "completed")
         self.assertEqual(task_res["escalations_count"], 1)
@@ -157,11 +158,7 @@ class TestAgentCoreAndOrchestrator(unittest.IsolatedAsyncioTestCase):
         orchestrator = AgentOrchestrator(router=self.mock_router)
         with patch("requests.post", side_effect=Exception("Connection refused")):
             candidates = [{"role": "button", "name": "OK", "ref": "aria-1"}]
-            res = orchestrator.call_cortex_llm(
-                intent="click OK",
-                candidates=candidates,
-                aria_tree=""
-            )
+            res = orchestrator.call_cortex_llm(intent="click OK", candidates=candidates, aria_tree="")
             self.assertEqual(res["chosen_ref"], "aria-1")
             self.assertIn("error", res)
             self.assertIn("Connection refused", res["error"])

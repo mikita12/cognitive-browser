@@ -6,35 +6,35 @@ via both REST API and Model Context Protocol (MCP) for AI agents.
 
 import os
 import time
-import asyncio
-import torch
-from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Request
+import torch
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from playwright.async_api import Browser, async_playwright
 from pydantic import BaseModel, Field
-from playwright.async_api import async_playwright, Browser, BrowserContext
 
-try:
-    from .deberta_router import DebertaDecisionRouter
-    from .agent_core import AgentCore, AriaElementParser
-    from .security import validate_url, SecurityError, mask_sensitive_value
-except ImportError:
-    from deberta_router import DebertaDecisionRouter
-    from agent_core import AgentCore, AriaElementParser
-    from security import validate_url, SecurityError, mask_sensitive_value
+from .agent_core import AgentCore, AriaElementParser
+from .deberta_router import DebertaDecisionRouter
+from .security import SecurityError, mask_sensitive_value, validate_url
 
 # Environment configuration
 MODEL_NAME = os.getenv("MODEL_NAME", "cross-encoder/nli-deberta-v3-small")
 DEVICE = os.getenv(
     "DEVICE",
-    "cuda" if torch.cuda.is_available() else ("mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu")
+    "cuda"
+    if torch.cuda.is_available()
+    else ("mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu"),
 )
 PORT = int(os.getenv("PORT", "8000"))
 SESSION_DIR = os.getenv("SESSION_DIR")
 if not SESSION_DIR:
-    SESSION_DIR = "/data/browser_sessions" if os.path.exists("/data") and os.access("/data", os.W_OK) else os.path.expanduser("~/.cognitive_browser/sessions")
+    SESSION_DIR = (
+        "/data/browser_sessions"
+        if os.path.exists("/data") and os.access("/data", os.W_OK)
+        else os.path.expanduser("~/.cognitive_browser/sessions")
+    )
 
 try:
     os.makedirs(SESSION_DIR, exist_ok=True)
@@ -61,8 +61,7 @@ async def lifespan(app: FastAPI):
     # Initialize Playwright
     playwright_manager = await async_playwright().start()
     browser_instance = await playwright_manager.chromium.launch(
-        headless=True,
-        args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+        headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
     )
     print("✅ [CognitiveBrowser] Ready to accept tasks!\n")
     yield
@@ -79,7 +78,7 @@ app = FastAPI(
     title="Cognitive Browser Decision Microservice",
     description="Ultra-fast local Reflex Core router for Playwright browser automation on GPU",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -130,7 +129,7 @@ async def health_check():
         "gpu_name": gpu_name,
         "vram_allocated_mb": vram_alloc,
         "model": MODEL_NAME,
-        "playwright_ready": browser_instance is not None
+        "playwright_ready": browser_instance is not None,
     }
 
 
@@ -142,9 +141,7 @@ async def evaluate_candidates(req: EvaluateRequest):
 
     t0 = time.perf_counter()
     decision = router_instance.evaluate_candidates(
-        intent=req.intent,
-        candidates=req.candidates,
-        confidence_threshold=req.confidence_threshold
+        intent=req.intent, candidates=req.candidates, confidence_threshold=req.confidence_threshold
     )
     decision["endpoint_latency_ms"] = round((time.perf_counter() - t0) * 1000, 2)
     return decision
@@ -156,7 +153,7 @@ async def take_aria_snapshot(req: SnapshotRequest):
     try:
         clean_url = validate_url(req.url)
     except SecurityError as se:
-        raise HTTPException(status_code=400, detail=str(se))
+        raise HTTPException(status_code=400, detail=str(se)) from se
 
     if not browser_instance:
         raise HTTPException(status_code=503, detail="Browser instance is not ready")
@@ -180,7 +177,7 @@ async def take_aria_snapshot(req: SnapshotRequest):
             "raw_snapshot": snapshot_yaml,
             "candidates_count": len(candidates),
             "candidates": candidates,
-            "latency_ms": round((time.perf_counter() - t0) * 1000, 2)
+            "latency_ms": round((time.perf_counter() - t0) * 1000, 2),
         }
     finally:
         await page.close()
@@ -195,7 +192,7 @@ async def execute_browse_task(req: BrowseTaskRequest):
     try:
         clean_url = validate_url(req.url)
     except SecurityError as se:
-        raise HTTPException(status_code=400, detail=str(se))
+        raise HTTPException(status_code=400, detail=str(se)) from se
 
     if not browser_instance or not agent_instance:
         raise HTTPException(status_code=503, detail="Browser or agent engine is not ready")
@@ -218,12 +215,8 @@ async def execute_browse_task(req: BrowseTaskRequest):
         if req.steps:
             for s in req.steps:
                 masked_fill = mask_sensitive_value(s.fill_value, instruction=s.instruction)
-                print(f"  -> Step: \"{s.instruction}\" (fill: {masked_fill})")
-                res = await agent_instance.execute_step(
-                    page=page,
-                    instruction=s.instruction,
-                    fill_value=s.fill_value
-                )
+                print(f'  -> Step: "{s.instruction}" (fill: {masked_fill})')
+                res = await agent_instance.execute_step(page=page, instruction=s.instruction, fill_value=s.fill_value)
                 steps_log.append(res)
                 if not res.get("executed"):
                     print(f"  ⚠️ Stopped at step: {res.get('error')}")
@@ -239,14 +232,14 @@ async def execute_browse_task(req: BrowseTaskRequest):
             "steps_executed": len(steps_log),
             "steps_log": steps_log,
             "final_aria_snapshot": current_snapshot[:1500] + "... (truncated)",
-            "total_task_time_ms": round((time.perf_counter() - t0) * 1000, 2)
+            "total_task_time_ms": round((time.perf_counter() - t0) * 1000, 2),
         }
     except Exception as e:
         return {
             "status": "error",
             "error": str(e),
             "steps_log": steps_log,
-            "total_task_time_ms": round((time.perf_counter() - t0) * 1000, 2)
+            "total_task_time_ms": round((time.perf_counter() - t0) * 1000, 2),
         }
     finally:
         await page.close()
@@ -270,33 +263,38 @@ async def list_mcp_tools():
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "instruction": {"type": "string", "description": "User intent or action to execute"},
-                                    "fill_value": {"type": "string", "description": "Optional string value to fill into field"}
+                                    "instruction": {
+                                        "type": "string",
+                                        "description": "User intent or action to execute",
+                                    },
+                                    "fill_value": {
+                                        "type": "string",
+                                        "description": "Optional string value to fill into field",
+                                    },
                                 },
-                                "required": ["instruction"]
-                            }
-                        }
+                                "required": ["instruction"],
+                            },
+                        },
                     },
-                    "required": ["url"]
-                }
+                    "required": ["url"],
+                },
             },
             {
                 "name": "get_aria_snapshot",
                 "description": "Extracts clean semantic ARIA accessibility tree from web page, removing ~98% of HTML noise.",
                 "inputSchema": {
                     "type": "object",
-                    "properties": {
-                        "url": {"type": "string", "description": "Target web page URL"}
-                    },
-                    "required": ["url"]
-                }
-            }
+                    "properties": {"url": {"type": "string", "description": "Target web page URL"}},
+                    "required": ["url"],
+                },
+            },
         ]
     }
 
 
 def main():
     import uvicorn
+
     uvicorn.run("cognitive_browser.server:app", host="0.0.0.0", port=PORT, reload=False)
 
 

@@ -6,18 +6,12 @@ Dynamically selects the optimal router based on user hardware and configuration.
 import os
 from typing import Optional, Union
 
-try:
-    from .deberta_router import DebertaDecisionRouter
-    from .api_router import ApiDecisionRouter
-except ImportError:
-    from deberta_router import DebertaDecisionRouter
-    from api_router import ApiDecisionRouter
+from .api_router import ApiDecisionRouter
+from .deberta_router import DebertaDecisionRouter
 
 
 def get_decision_router(
-    mode: Optional[str] = None,
-    device: Optional[str] = None,
-    api_key: Optional[str] = None
+    mode: Optional[str] = None, device: Optional[str] = None, api_key: Optional[str] = None
 ) -> Union[DebertaDecisionRouter, ApiDecisionRouter]:
     """
     Returns the appropriate decision router.
@@ -28,7 +22,8 @@ def get_decision_router(
     3. If GROQ_API_KEY / OPENAI_API_KEY / HF_TOKEN is present and ROUTER_MODE=api -> ApiDecisionRouter
     4. Default: DebertaDecisionRouter (100% offline, free, 0 LLM tokens)
     """
-    selected_mode = (mode or os.getenv("ROUTER_MODE", "deberta")).lower()
+    raw_mode = mode or os.getenv("ROUTER_MODE") or "deberta"
+    selected_mode = raw_mode.lower()
 
     if selected_mode == "api":
         return ApiDecisionRouter(api_key=api_key)

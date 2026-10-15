@@ -6,16 +6,17 @@ Security utilities for Cognitive Browser:
 - Indirect prompt injection sanitization.
 """
 
+import ipaddress
 import os
 import re
 import socket
-import ipaddress
 import urllib.parse
 from typing import List, Optional, Set
 
 
 class SecurityError(ValueError):
     """Raised when an operation violates security policies."""
+
     pass
 
 
@@ -29,8 +30,21 @@ METADATA_HOSTS: Set[str] = {
 }
 
 SENSITIVE_KEYWORDS: Set[str] = {
-    "password", "haslo", "hasło", "secret", "token", "apikey", "api_key",
-    "pin", "cvv", "cvc", "card", "credit_card", "ssn", "auth", "bearer"
+    "password",
+    "haslo",
+    "hasło",
+    "secret",
+    "token",
+    "apikey",
+    "api_key",
+    "pin",
+    "cvv",
+    "cvc",
+    "card",
+    "credit_card",
+    "ssn",
+    "auth",
+    "bearer",
 }
 
 
@@ -50,11 +64,7 @@ def is_private_ip(ip_str: str) -> bool:
         return False
 
 
-def validate_url(
-    url: str,
-    allow_private: Optional[bool] = None,
-    allowed_domains: Optional[List[str]] = None
-) -> str:
+def validate_url(url: str, allow_private: Optional[bool] = None, allowed_domains: Optional[List[str]] = None) -> str:
     """
     Validates a URL before navigation to prevent SSRF and unsafe protocols.
 
@@ -74,9 +84,7 @@ def validate_url(
 
     # 1. Scheme check
     if parsed.scheme.lower() not in ("http", "https"):
-        raise SecurityError(
-            f"Blocked scheme '{parsed.scheme}'. Only 'http' and 'https' protocols are permitted."
-        )
+        raise SecurityError(f"Blocked scheme '{parsed.scheme}'. Only 'http' and 'https' protocols are permitted.")
 
     hostname = (parsed.hostname or "").lower().strip()
     if not hostname:
@@ -98,19 +106,15 @@ def validate_url(
 
         # Check if hostname is direct IP literal
         if is_private_ip(hostname):
-            raise SecurityError(
-                f"Access to private/local IP address '{hostname}' is prohibited (SSRF prevention)."
-            )
+            raise SecurityError(f"Access to private/local IP address '{hostname}' is prohibited (SSRF prevention).")
 
         # Resolve hostname to IP to verify it does not resolve to a private network
         try:
             addr_info = socket.getaddrinfo(hostname, None)
             for entry in addr_info:
-                ip_str = entry[4][0]
+                ip_str = str(entry[4][0])
                 if is_private_ip(ip_str):
-                    raise SecurityError(
-                        f"Hostname '{hostname}' resolves to private IP '{ip_str}' (SSRF blocked)."
-                    )
+                    raise SecurityError(f"Hostname '{hostname}' resolves to private IP '{ip_str}' (SSRF blocked).")
         except socket.gaierror:
             # If DNS resolution fails, allow standard browser navigation to handle NXDOMAIN
             pass
@@ -130,18 +134,12 @@ def validate_url(
                 break
 
         if not domain_match:
-            raise SecurityError(
-                f"Host '{hostname}' is not in the allowed domains list: {allowed_domains}"
-            )
+            raise SecurityError(f"Host '{hostname}' is not in the allowed domains list: {allowed_domains}")
 
     return cleaned_url
 
 
-def mask_sensitive_value(
-    value: Optional[str],
-    instruction: str = "",
-    force_mask: Optional[bool] = None
-) -> str:
+def mask_sensitive_value(value: Optional[str], instruction: str = "", force_mask: Optional[bool] = None) -> str:
     """
     Masks sensitive values (passwords, auth tokens) in execution logs and telemetry.
     """
@@ -171,7 +169,7 @@ def sanitize_untrusted_text(text: str, max_length: int = 150) -> str:
     if not text:
         return ""
     # Strip non-printable / control characters except standard space
-    clean = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
+    clean = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", text)
     # Strip potential prompt injection delimiter markers
     clean = clean.replace("```", "'''")
     return clean[:max_length].strip()

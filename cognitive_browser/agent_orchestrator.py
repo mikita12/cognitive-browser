@@ -5,22 +5,17 @@ When confidence is low (<0.50), Cortex Engine (LLM) inspects condensed ARIA cand
 resolves ambiguity, and assists Reflex Core to achieve 100% task completion.
 """
 
-import asyncio
-import time
 import json
-import requests
 import re
-from typing import List, Dict, Any, Optional
-from playwright.async_api import Page, Browser, async_playwright
+import time
+from typing import Any, Dict, List, Optional
 
-try:
-    from .deberta_router import DebertaDecisionRouter
-    from .agent_core import AgentCore, AriaElementParser
-    from .security import validate_url, mask_sensitive_value, sanitize_untrusted_text
-except ImportError:
-    from deberta_router import DebertaDecisionRouter
-    from agent_core import AgentCore, AriaElementParser
-    from security import validate_url, mask_sensitive_value, sanitize_untrusted_text
+import requests
+from playwright.async_api import Page
+
+from .agent_core import AgentCore, AriaElementParser
+from .router_factory import get_decision_router
+from .security import mask_sensitive_value, sanitize_untrusted_text, validate_url
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen2.5:1.5b"
@@ -28,27 +23,18 @@ OLLAMA_MODEL = "qwen2.5:1.5b"
 
 class AgentOrchestrator:
     def __init__(
-        self,
-        device: str = "cuda",
-        router: Optional[Any] = None,
-        confidence_threshold: Optional[float] = None
+        self, device: str = "cuda", router: Optional[Any] = None, confidence_threshold: Optional[float] = None
     ):
         if router is not None:
             self.router = router
         else:
-            try:
-                from .router_factory import get_decision_router
-            except ImportError:
-                from router_factory import get_decision_router
             self.router = get_decision_router(device=device)
         self.confidence_threshold = confidence_threshold
-        self.agent = AgentCore(
-            device=device,
-            router=self.router,
-            confidence_threshold=confidence_threshold
-        )
+        self.agent = AgentCore(device=device, router=self.router, confidence_threshold=confidence_threshold)
 
-    def call_cortex_llm(self, intent: str, candidates: List[Dict[str, Any]], aria_tree: str, fill_value: Optional[str] = None) -> Dict[str, Any]:
+    def call_cortex_llm(
+        self, intent: str, candidates: List[Dict[str, Any]], aria_tree: str, fill_value: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Cortex Engine (LLM) steps in upon escalation, analyzes condensed ARIA candidates and identifies the target element.
         """
@@ -59,7 +45,7 @@ class AgentOrchestrator:
         for c in candidates[:35]:
             clean_name = sanitize_untrusted_text(c.get("name", ""))
             clean_details = sanitize_untrusted_text(c.get("text", "")[:80])
-            sanitized_elements.append(f"- [{c['role']}] \"{clean_name}\" (ref: {c['ref']}, details: {clean_details})")
+            sanitized_elements.append(f'- [{c["role"]}] "{clean_name}" (ref: {c["ref"]}, details: {clean_details})')
         element_list_str = "\n".join(sanitized_elements)
 
         goal_desc = f'fill into the field for "{intent}"' if fill_value else f'achieve "{intent}"'
@@ -80,13 +66,8 @@ Return ONLY a valid JSON object with format:
         try:
             resp = requests.post(
                 OLLAMA_URL,
-                json={
-                    "model": OLLAMA_MODEL,
-                    "prompt": prompt,
-                    "stream": False,
-                    "format": "json"
-                },
-                timeout=10
+                json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False, "format": "json"},
+                timeout=10,
             )
             data = resp.json()
             out_text = data.get("response", "{}")
@@ -107,7 +88,7 @@ Return ONLY a valid JSON object with format:
                 "action": "click" if not fill_value else "fill",
                 "tokens": 200,
                 "latency_ms": round((time.perf_counter() - t0) * 1000, 2),
-                "error": str(e)
+                "error": str(e),
             }
 
     # Backward-compatibility alias
@@ -145,30 +126,40 @@ Return ONLY a valid JSON object with format:
             # Step B: If Reflex Core is uncertain -> escalate to Cortex Engine
             if not step_res.get("executed"):
                 escalations_count += 1
-                print(f"     ⚠️ Escalation on step {idx+1} (\"{inst}\") -> invoking Cortex Engine...")
+                print(f'     ⚠️ Escalation on step {idx + 1} ("{inst}") -> invoking Cortex Engine...')
 
                 # Retrieve fresh ARIA snapshot for Cortex
                 current_snapshot = await page.aria_snapshot()
                 candidates = AriaElementParser.parse_snapshot(
-                    current_snapshot,
-                    max_candidates=50,
-                    require_input_only=bool(val)
+                    current_snapshot, max_candidates=50, require_input_only=bool(val)
                 )
                 if not candidates and val:
-                    candidates = AriaElementParser.parse_snapshot(current_snapshot, max_candidates=50, require_input_only=False)
+                    candidates = AriaElementParser.parse_snapshot(
+                        current_snapshot, max_candidates=50, require_input_only=False
+                    )
 
                 # Cortex Engine resolves element
-                cortex_help = self.call_cortex_llm(intent=inst, candidates=candidates, aria_tree=current_snapshot, fill_value=val)
+                cortex_help = self.call_cortex_llm(
+                    intent=inst, candidates=candidates, aria_tree=current_snapshot, fill_value=val
+                )
                 total_cortex_tokens += cortex_help.get("tokens", 0)
 
                 chosen_name = cortex_help.get("chosen_name", "")
                 chosen_ref = cortex_help.get("chosen_ref", "")
-                print(f"     🧠 Cortex resolved: \"{chosen_name}\" ({chosen_ref}) in {cortex_help.get('latency_ms')} ms (~{cortex_help.get('tokens')} tok.)")
+                print(
+                    f'     🧠 Cortex resolved: "{chosen_name}" ({chosen_ref}) in {cortex_help.get("latency_ms")} ms (~{cortex_help.get("tokens")} tok.)'
+                )
 
                 # Match candidate
                 matched_cand = next(
-                    (c for c in candidates if c["ref"] == chosen_ref or c["name"] == chosen_name or (chosen_name and chosen_name.lower() in c["name"].lower())),
-                    None
+                    (
+                        c
+                        for c in candidates
+                        if c["ref"] == chosen_ref
+                        or c["name"] == chosen_name
+                        or (chosen_name and chosen_name.lower() in c["name"].lower())
+                    ),
+                    None,
                 )
                 if not matched_cand and candidates:
                     matched_cand = candidates[0]
@@ -177,7 +168,7 @@ Return ONLY a valid JSON object with format:
                     try:
                         role = matched_cand["role"]
                         name = matched_cand["name"]
-                        clean_name = re.sub(r'[\ue000-\uf8ff]', '', name).strip()
+                        clean_name = re.sub(r"[\ue000-\uf8ff]", "", name).strip()
                         name_pattern = re.compile(re.escape(clean_name), re.I) if clean_name else name
 
                         if val and role in ["combobox", "textbox", "searchbox", "spinbutton"]:
@@ -192,9 +183,13 @@ Return ONLY a valid JSON object with format:
                                 await page.get_by_role(role, name=name_pattern).first.click(timeout=3500)
                             except Exception:
                                 try:
-                                    await page.get_by_role(role, name=name_pattern).first.click(timeout=2000, force=True)
+                                    await page.get_by_role(role, name=name_pattern).first.click(
+                                        timeout=2000, force=True
+                                    )
                                 except Exception:
-                                    await page.get_by_text(name_pattern, exact=False).first.click(timeout=3000, force=True)
+                                    await page.get_by_text(name_pattern, exact=False).first.click(
+                                        timeout=3000, force=True
+                                    )
                             step_res["action_taken"] = "click() [assisted by Cortex]"
 
                         step_res["executed"] = True
@@ -225,5 +220,5 @@ Return ONLY a valid JSON object with format:
             "system1_gpu_ms": round(total_reflex_gpu_ms, 2),
             "steps_executed": len([s for s in task_steps if s.get("executed")]),
             "steps_log": steps_log,
-            "final_snapshot_summary": final_snapshot[:1500]
+            "final_snapshot_summary": final_snapshot[:1500],
         }
