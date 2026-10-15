@@ -290,6 +290,7 @@ async def run_single_iteration(
                         "total_tokens": cog_total_tokens,
                         "steps_executed": cog_res.get("steps_executed", 0),
                         "final_url": cog_res.get("final_url"),
+                        "steps_log": cog_res.get("steps_log", []),
                     },
                     "base_playwright": {
                         "success": base_success,
@@ -318,7 +319,45 @@ async def run_benchmark(runs: int = 1, mode: str = "fixture", output_file: Optio
     print("   VS Base Playwright MCP (Analytical ReAct Simulation)")
     print("=" * 95)
 
-    cases = LOCAL_FIXTURE_CASES if mode == "fixture" else TEST_CASES
+    fixture_server = None
+    if mode == "fixture":
+        os.environ["ALLOW_PRIVATE_NETWORKS"] = "true"
+        import functools
+        import threading
+        from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+        class QuietFixtureHandler(SimpleHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+        handler = functools.partial(QuietFixtureHandler, directory=FIXTURES_DIR)
+        fixture_server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        f_port = fixture_server.server_address[1]
+        f_thread = threading.Thread(target=fixture_server.serve_forever, daemon=True)
+        f_thread.start()
+        cases = [
+            {
+                "id": 1,
+                "category": "E-Commerce",
+                "name": "Local Store Catalog - Search Product",
+                "url": f"http://127.0.0.1:{f_port}/ecommerce.html",
+                "steps": [{"instruction": "Search Products", "fill_value": "Pro Laptop"}, {"instruction": "Search"}],
+            },
+            {
+                "id": 2,
+                "category": "Rail Transport",
+                "name": "Local Travel Booking - Train Connection",
+                "url": f"http://127.0.0.1:{f_port}/travel.html",
+                "steps": [
+                    {"instruction": "Departure station", "fill_value": "Warszawa Centralna"},
+                    {"instruction": "Destination station", "fill_value": "Krakow Glowny"},
+                    {"instruction": "Search connections"},
+                ],
+            },
+        ]
+    else:
+        cases = TEST_CASES
+
     print(f"   Active dataset: {len(cases)} cases.")
     if mode == "live":
         print("   ⚠️ Running in LIVE mode against real-world websites.")
@@ -330,29 +369,34 @@ async def run_benchmark(runs: int = 1, mode: str = "fixture", output_file: Optio
     all_runs_results = []
     run_summaries = []
 
-    for r_idx in range(1, runs + 1):
-        run_res = await run_single_iteration(orch, cases, run_idx=r_idx)
-        all_runs_results.append(run_res)
+    try:
+        for r_idx in range(1, runs + 1):
+            run_res = await run_single_iteration(orch, cases, run_idx=r_idx)
+            all_runs_results.append(run_res)
 
-        total_cog_tok = sum(r["cognitive"]["total_tokens"] for r in run_res)
-        avg_cog_t = sum(r["cognitive"]["total_time_s"] for r in run_res) / len(run_res)
-        avg_cog_gpu = sum(r["cognitive"]["gpu_inference_ms"] for r in run_res) / len(run_res)
-        cog_comp = sum(1 for r in run_res if r["cognitive"]["success"])
+            total_cog_tok = sum(r["cognitive"]["total_tokens"] for r in run_res)
+            avg_cog_t = sum(r["cognitive"]["total_time_s"] for r in run_res) / len(run_res)
+            avg_cog_gpu = sum(r["cognitive"]["gpu_inference_ms"] for r in run_res) / len(run_res)
+            cog_comp = sum(1 for r in run_res if r["cognitive"]["success"])
 
-        total_base_tok = sum(r["base_playwright"]["tokens"] for r in run_res)
-        avg_base_t = sum(r["base_playwright"]["realistic_total_time_s"] for r in run_res) / len(run_res)
+            total_base_tok = sum(r["base_playwright"]["tokens"] for r in run_res)
+            avg_base_t = sum(r["base_playwright"]["realistic_total_time_s"] for r in run_res) / len(run_res)
 
-        run_summaries.append(
-            {
-                "run": r_idx,
-                "cog_tokens": total_cog_tok,
-                "cog_avg_time_s": avg_cog_t,
-                "cog_avg_gpu_ms": avg_cog_gpu,
-                "cog_completed": cog_comp,
-                "base_tokens": total_base_tok,
-                "base_avg_time_s": avg_base_t,
-            }
-        )
+            run_summaries.append(
+                {
+                    "run": r_idx,
+                    "cog_tokens": total_cog_tok,
+                    "cog_avg_time_s": avg_cog_t,
+                    "cog_avg_gpu_ms": avg_cog_gpu,
+                    "cog_completed": cog_comp,
+                    "base_tokens": total_base_tok,
+                    "base_avg_time_s": avg_base_t,
+                }
+            )
+    finally:
+        if fixture_server:
+            fixture_server.shutdown()
+            fixture_server.server_close()
 
     def calc_stat(values: List[float]):
         m = statistics.mean(values)
@@ -371,6 +415,28 @@ async def run_benchmark(runs: int = 1, mode: str = "fixture", output_file: Optio
     mean_base_t, std_base_t = calc_stat(base_times)
     mean_base_tok, std_base_tok = calc_stat(base_tokens)
 
+    # Compute step-level Reflex latencies from steps_log
+    all_step_latencies: List[float] = []
+    for r in all_runs_results:
+        for case in r:
+            for s in case.get("cognitive", {}).get("steps_log", []):
+                if "latency_ms" in s and s.get("step") != "auto_dismiss_cookies":
+                    all_step_latencies.append(float(s["latency_ms"]))
+
+    reflex_step_stats: Dict[str, Any] = {}
+    if all_step_latencies:
+        sorted_lats = sorted(all_step_latencies)
+        p95_idx = int(len(sorted_lats) * 0.95)
+        reflex_step_stats = {
+            "metric": f"Reflex Core per-step inference latency ({device.upper()})",
+            "sample_size": len(sorted_lats),
+            "median_ms": round(statistics.median(sorted_lats), 1),
+            "p95_ms": round(sorted_lats[p95_idx], 1),
+            "mean_ms": round(statistics.mean(sorted_lats), 1),
+            "min_ms": round(min(sorted_lats), 1),
+            "max_ms": round(max(sorted_lats), 1),
+        }
+
     print("\n" + "=" * 95)
     print(f"📊 BENCHMARK SUMMARY ({runs} RUN{'S' if runs > 1 else ''} | {len(cases)} CASES)")
     print("=" * 95)
@@ -381,6 +447,10 @@ async def run_benchmark(runs: int = 1, mode: str = "fixture", output_file: Optio
     print(
         f"Total Token Consumption        : {mean_cog_tok:,.0f} ± {std_cog_tok:,.0f} | Baseline: {mean_base_tok:,.0f} ± {std_base_tok:,.0f}"
     )
+    if reflex_step_stats:
+        print(
+            f"Reflex Step Latency ({device.upper()}) : median {reflex_step_stats['median_ms']} ms | p95 {reflex_step_stats['p95_ms']} ms (n={reflex_step_stats['sample_size']})"
+        )
     if mean_base_tok > 0:
         reduction = ((mean_base_tok - mean_cog_tok) / mean_base_tok) * 100
         print(f"Token Reduction vs Baseline    : {reduction:.1f}% LESS TOKENS")
@@ -400,6 +470,7 @@ async def run_benchmark(runs: int = 1, mode: str = "fixture", output_file: Optio
             "cognitive_tokens": {"mean": round(mean_cog_tok, 1), "stdev": round(std_cog_tok, 1)},
             "baseline_avg_time_s": {"mean": round(mean_base_t, 3), "stdev": round(std_base_t, 3)},
             "baseline_tokens": {"mean": round(mean_base_tok, 1), "stdev": round(std_base_tok, 1)},
+            "reflex_step_latency_ms": reflex_step_stats,
         },
         "runs": all_runs_results,
     }

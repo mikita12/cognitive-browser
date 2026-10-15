@@ -8,10 +8,10 @@ import argparse
 import json
 import os
 import statistics
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
-def summarize_benchmark(results_path: str, output_path: str = None) -> Dict[str, Any]:
+def summarize_benchmark(results_path: str, output_path: Optional[str] = None) -> Dict[str, Any]:
     with open(results_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
