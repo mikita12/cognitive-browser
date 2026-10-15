@@ -1,0 +1,407 @@
+[
+  {
+    "id": 1,
+    "category": "Transport kolejowy",
+    "name": "KOLEO - Wyszukiwanie połączenia kolejowego",
+    "url": "https://koleo.pl",
+    "steps_count": 3,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 5.09,
+      "gpu_inference_ms": 219.31,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 212,
+      "steps_executed": 3,
+      "final_url": "https://koleo.pl/rozklad-pkp/wroclaw-glowny/poznan-glowny/15-10-2026_03:45"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 3.16,
+      "realistic_total_time_s": 19.96,
+      "tokens": 19550,
+      "roundtrips": 6,
+      "steps_executed": 3,
+      "error": null
+    }
+  },
+  {
+    "id": 2,
+    "category": "Logistyka i kurierzy",
+    "name": "InPost - Nawigacja do cennika paczkomatowego",
+    "url": "https://inpost.pl",
+    "steps_count": 2,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 4.84,
+      "gpu_inference_ms": 105.63,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 171,
+      "steps_executed": 2,
+      "final_url": "https://inpost.pl/cenniki#individual-customer?manager-paczek-paczkomat"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 3.85,
+      "realistic_total_time_s": 17.85,
+      "tokens": 13458,
+      "roundtrips": 5,
+      "steps_executed": 2,
+      "error": null
+    }
+  },
+  {
+    "id": 3,
+    "category": "E-Commerce (Standard)",
+    "name": "Books to Scrape - Filtrowanie kategorii książek",
+    "url": "http://books.toscrape.com",
+    "steps_count": 2,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 4.44,
+      "gpu_inference_ms": 39.49,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 167,
+      "steps_executed": 2,
+      "final_url": "http://books.toscrape.com/catalogue/category/books/food-and-drink_33/index.html"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 3.39,
+      "realistic_total_time_s": 17.39,
+      "tokens": 21505,
+      "roundtrips": 5,
+      "steps_executed": 2,
+      "error": null
+    }
+  },
+  {
+    "id": 4,
+    "category": "Formularze wielopolowe",
+    "name": "HTTPBin - Wypełnianie zamówienia pizzy (Formularz HTML5)",
+    "url": "https://httpbin.org/forms/post",
+    "steps_count": 5,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 6.49,
+      "gpu_inference_ms": 33.28,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 218,
+      "steps_executed": 5,
+      "final_url": "https://httpbin.org/forms/post"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 3.91,
+      "realistic_total_time_s": 26.31,
+      "tokens": 13588,
+      "roundtrips": 8,
+      "steps_executed": 5,
+      "error": null
+    }
+  },
+  {
+    "id": 5,
+    "category": "Marketplace / Ogłoszenia",
+    "name": "OLX - Wyszukiwanie elektroniki",
+    "url": "https://www.olx.pl",
+    "steps_count": 2,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 4.79,
+      "gpu_inference_ms": 57.55,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 180,
+      "steps_executed": 2,
+      "final_url": "https://www.olx.pl/oferty/"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 6.98,
+      "realistic_total_time_s": 20.98,
+      "tokens": 31226,
+      "roundtrips": 5,
+      "steps_executed": 1,
+      "error": null
+    }
+  },
+  {
+    "id": 6,
+    "category": "Społeczność i newsy",
+    "name": "Hacker News - Nawigacja do sekcji Show HN",
+    "url": "https://news.ycombinator.com",
+    "steps_count": 2,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 4.95,
+      "gpu_inference_ms": 36.19,
+      "escalations_count": 1,
+      "system2_tokens": 254,
+      "total_tokens": 419,
+      "steps_executed": 2,
+      "final_url": "https://news.ycombinator.com/forgot"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 3.71,
+      "realistic_total_time_s": 17.71,
+      "tokens": 56078,
+      "roundtrips": 5,
+      "steps_executed": 2,
+      "error": null
+    }
+  },
+  {
+    "id": 7,
+    "category": "Programowanie / Open Source",
+    "name": "GitHub Trending - Przegląd popularnych repozytoriów",
+    "url": "https://github.com/trending",
+    "steps_count": 2,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 8.52,
+      "gpu_inference_ms": 48.26,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 169,
+      "steps_executed": 2,
+      "final_url": "https://github.com/trending"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 6.78,
+      "realistic_total_time_s": 20.78,
+      "tokens": 23897,
+      "roundtrips": 5,
+      "steps_executed": 1,
+      "error": null
+    }
+  },
+  {
+    "id": 8,
+    "category": "Polski E-Commerce",
+    "name": "Morele.net - Wyszukiwanie sprzętu komputerowego",
+    "url": "https://www.morele.net",
+    "steps_count": 2,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 5.04,
+      "gpu_inference_ms": 30.94,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 182,
+      "steps_executed": 2,
+      "final_url": "https://www.morele.net/wyszukiwarka/?q=Klawiatura+mechaniczna&d=0"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 6.76,
+      "realistic_total_time_s": 20.76,
+      "tokens": 34164,
+      "roundtrips": 5,
+      "steps_executed": 1,
+      "error": null
+    }
+  },
+  {
+    "id": 9,
+    "category": "E-Commerce / Cytaty",
+    "name": "Quotes to Scrape - Filtrowanie cytatów po tagu",
+    "url": "http://quotes.toscrape.com",
+    "steps_count": 2,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 3.67,
+      "gpu_inference_ms": 45.4,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 164,
+      "steps_executed": 2,
+      "final_url": "http://quotes.toscrape.com/tag/humor/page/2/"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 2.6,
+      "realistic_total_time_s": 16.6,
+      "tokens": 8072,
+      "roundtrips": 5,
+      "steps_executed": 2,
+      "error": null
+    }
+  },
+  {
+    "id": 10,
+    "category": "Gastronomia / Pizzeria",
+    "name": "Express Pizza - Wybór opcji dostawy Detroit Style",
+    "url": "https://expresspizza.pl",
+    "steps_count": 2,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 4.2,
+      "gpu_inference_ms": 65.42,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 171,
+      "steps_executed": 2,
+      "final_url": "https://expresspizza.pl/pizzeria-zielona-gora"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 2.63,
+      "realistic_total_time_s": 16.63,
+      "tokens": 11723,
+      "roundtrips": 5,
+      "steps_executed": 2,
+      "error": null
+    }
+  },
+  {
+    "id": 11,
+    "category": "Gastronomia / Pizzeria rzemieślnicza",
+    "name": "Mania Smaku - Wybór oferty pizzy",
+    "url": "https://mania.pizza",
+    "steps_count": 2,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 3.76,
+      "gpu_inference_ms": 39.49,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 168,
+      "steps_executed": 2,
+      "final_url": "https://mania.pizza/polityka-plikow-cookies-eu/"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 6.72,
+      "realistic_total_time_s": 20.72,
+      "tokens": 13747,
+      "roundtrips": 5,
+      "steps_executed": 1,
+      "error": null
+    }
+  },
+  {
+    "id": 12,
+    "category": "Lokalna gastronomia",
+    "name": "Pizzu Wrocław - Sprawdzenie oferty online",
+    "url": "https://pizzu.pl",
+    "steps_count": 2,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 4.0,
+      "gpu_inference_ms": 117.81,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 164,
+      "steps_executed": 2,
+      "final_url": "https://www.pizzu.pl/#menu-lunch"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 3.25,
+      "realistic_total_time_s": 17.25,
+      "tokens": 41022,
+      "roundtrips": 5,
+      "steps_executed": 2,
+      "error": null
+    }
+  },
+  {
+    "id": 13,
+    "category": "Transport publiczny",
+    "name": "E-Podróżnik - Wyszukiwanie relacji Wrocław - Kraków",
+    "url": "https://www.e-podroznik.pl",
+    "steps_count": 3,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 5.41,
+      "gpu_inference_ms": 63.98,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 199,
+      "steps_executed": 3,
+      "final_url": "https://www.e-podroznik.pl/zamowienia"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 15.21,
+      "realistic_total_time_s": 32.01,
+      "tokens": 16430,
+      "roundtrips": 6,
+      "steps_executed": 0,
+      "error": null
+    }
+  },
+  {
+    "id": 14,
+    "category": "Administracja publiczna",
+    "name": "Gov.pl - Wyszukiwanie usługi dowodu osobistego",
+    "url": "https://www.gov.pl",
+    "steps_count": 2,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 4.6,
+      "gpu_inference_ms": 64.43,
+      "escalations_count": 0,
+      "system2_tokens": 0,
+      "total_tokens": 179,
+      "steps_executed": 2,
+      "final_url": "https://www.gov.pl/"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 3.32,
+      "realistic_total_time_s": 17.32,
+      "tokens": 16312,
+      "roundtrips": 5,
+      "steps_executed": 2,
+      "error": null
+    }
+  },
+  {
+    "id": 15,
+    "category": "Transport miejski",
+    "name": "MPK Wrocław - Rozkład jazdy linii tramwajowej 8",
+    "url": "https://www.wroclaw.pl/komunikacja/rozklady-jazdy",
+    "steps_count": 1,
+    "cognitive": {
+      "success": true,
+      "status": "completed",
+      "total_time_s": 7.03,
+      "gpu_inference_ms": 29.72,
+      "escalations_count": 1,
+      "system2_tokens": 1293,
+      "total_tokens": 1459,
+      "steps_executed": 1,
+      "final_url": "https://www.wroclaw.pl/komunikacja/rozklady-jazdy"
+    },
+    "base_playwright": {
+      "success": true,
+      "browser_time_s": 2.55,
+      "realistic_total_time_s": 13.75,
+      "tokens": 62208,
+      "roundtrips": 4,
+      "steps_executed": 1,
+      "error": null
+    }
+  }
+]
