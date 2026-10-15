@@ -9,6 +9,11 @@ import torch
 from typing import List, Dict, Any, Optional
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
+try:
+    from .config import get_confidence_threshold
+except ImportError:
+    from config import get_confidence_threshold
+
 
 class DebertaDecisionRouter:
     """
@@ -52,12 +57,15 @@ class DebertaDecisionRouter:
         self,
         intent: str,
         candidates: List[Dict[str, Any]],
-        confidence_threshold: float = 0.50
+        confidence_threshold: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Evaluates all candidate elements in parallel using NLI (entailment vs contradiction).
         Returns the top matching element, inferred action, and inference latency.
         """
+        if confidence_threshold is None:
+            confidence_threshold = get_confidence_threshold()
+
         if not candidates:
             return {
                 "target_ref": "NONE",

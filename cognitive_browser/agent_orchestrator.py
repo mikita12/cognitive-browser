@@ -27,7 +27,12 @@ OLLAMA_MODEL = "qwen2.5:1.5b"
 
 
 class AgentOrchestrator:
-    def __init__(self, device: str = "cuda", router: Optional[Any] = None):
+    def __init__(
+        self,
+        device: str = "cuda",
+        router: Optional[Any] = None,
+        confidence_threshold: Optional[float] = None
+    ):
         if router is not None:
             self.router = router
         else:
@@ -36,7 +41,12 @@ class AgentOrchestrator:
             except ImportError:
                 from router_factory import get_decision_router
             self.router = get_decision_router(device=device)
-        self.agent = AgentCore(device=device, router=self.router)
+        self.confidence_threshold = confidence_threshold
+        self.agent = AgentCore(
+            device=device,
+            router=self.router,
+            confidence_threshold=confidence_threshold
+        )
 
     def call_cortex_llm(self, intent: str, candidates: List[Dict[str, Any]], aria_tree: str, fill_value: Optional[str] = None) -> Dict[str, Any]:
         """

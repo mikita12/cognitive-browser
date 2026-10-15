@@ -12,9 +12,11 @@ from playwright.async_api import Page, async_playwright
 try:
     from .deberta_router import DebertaDecisionRouter
     from .security import mask_sensitive_value
+    from .config import get_confidence_threshold
 except ImportError:
     from deberta_router import DebertaDecisionRouter
     from security import mask_sensitive_value
+    from config import get_confidence_threshold
 
 
 class AriaElementParser:
@@ -95,7 +97,8 @@ class AgentCore:
         self,
         model_name: str = "cross-encoder/nli-deberta-v3-small",
         device: str = "cuda",
-        router: Optional[Any] = None
+        router: Optional[Any] = None,
+        confidence_threshold: Optional[float] = None
     ):
         if router is not None:
             self.router = router
@@ -105,6 +108,7 @@ class AgentCore:
             except ImportError:
                 from router_factory import get_decision_router
             self.router = get_decision_router(device=device)
+        self.confidence_threshold = confidence_threshold if confidence_threshold is not None else get_confidence_threshold()
         self.execution_log = []
 
     async def auto_dismiss_overlays(self, page: Page) -> bool:
@@ -180,7 +184,11 @@ class AgentCore:
             candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=50, require_input_only=False)
 
         # 2. Fast DeBERTa-v3 evaluation on GPU
-        decision = self.router.evaluate_candidates(intent=instruction, candidates=candidates)
+        decision = self.router.evaluate_candidates(
+            intent=instruction,
+            candidates=candidates,
+            confidence_threshold=self.confidence_threshold
+        )
         latency_ms = decision["latency_ms"]
 
         step_info = {
