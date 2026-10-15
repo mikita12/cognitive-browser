@@ -109,6 +109,10 @@ Return ONLY a valid JSON object with format:
         await page.goto(validated_url, wait_until="domcontentloaded", timeout=25000)
         await page.wait_for_timeout(1000)
 
+        # Validate final URL after redirects
+        final_url = page.url
+        validate_url(final_url)
+
         # 1. Auto-dismiss cookies
         dismissed = await self.agent.auto_dismiss_overlays(page)
         if dismissed:
