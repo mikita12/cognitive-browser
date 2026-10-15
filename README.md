@@ -31,26 +31,27 @@ By resolving routine element interactions through Natural Language Inference (NL
 
 ## Architecture
 
-Standard browser agents feed accessibility snapshots or raw HTML into a cloud LLM reasoning loop on every turn. Cognitive Browser divides automation into two distinct tiers:
+Standard browser agents feed full accessibility snapshots or raw HTML into a cloud LLM reasoning loop on every single turn. Cognitive Browser divides automation into a hybrid edge/cloud architecture:
 
 ```mermaid
 flowchart TD
-    User["Agent / Pre-scripted Step List"] --> Nav["Browser Navigation & Overlay Auto-Dismiss"]
+    User["Orchestrating Agent (Claude / Gemini / GPT)"] -->|"cognitive_browse(url, steps)"| Nav["Browser Navigation & Overlay Auto-Dismiss"]
     Nav --> Snapshot["Accessibility Tree (ARIA Snapshot)"]
     
     Snapshot --> Reflex["Reflex Core: DeBERTa-v3 NLI Cross-Encoder\n(Local GPU / MPS / CPU)"]
     
-    Reflex -- "Confidence >= Threshold (default: 0.50)" --> Exec["Direct Playwright Action\n(fill / click) (median: 24.9 ms, p95: 64.6 ms)"]
+    Reflex -- "Confidence >= Threshold (default: 0.50)" --> Exec["Direct Playwright Action\n(fill / click) (~25 ms, 0 LLM tokens)"]
     
-    Reflex -- "Confidence < Threshold or Unmatched" --> Cortex["Cortex Engine: LLM Escalation\n(Ollama / Cloud LLM)"]
-    Cortex -->|"Resolves candidate element"| Exec
+    Reflex -- "Confidence < Threshold (Ambiguity)" --> Esc["Pause & Return 'clarification_needed'\nwith Top Candidates via MCP"]
+    Esc -->|"Clarifies target via smart_action"| User
     
     Exec -->|"Next step"| Next["Next Step / Completion"]
 ```
 
-1. **Reflex Core**: Evaluates interactive candidates using Zero-Shot Natural Language Inference (`cross-encoder/nli-deberta-v3-small`, 140M parameters) where the premise is candidate metadata (role, name, text) and the hypothesis is the user's step intent.
-2. **Cortex Engine**: When confidence falls below the configured threshold (`REFLEX_CONFIDENCE_THRESHOLD`, default `0.50`) or when no suitable element is found, Cortex inspects the condensed candidate list with an LLM to resolve ambiguities.
+1. **Reflex Core (Local System 1)**: Evaluates interactive candidates using Zero-Shot Natural Language Inference (`cross-encoder/nli-deberta-v3-small`, 140M parameters on GPU/CPU) in ~25 ms with **zero cloud tokens**.
+2. **Orchestrating Agent as Cortex (System 2)**: When confidence falls below threshold (`REFLEX_CONFIDENCE_THRESHOLD`, default `0.50`) or an element is ambiguous, execution pauses and returns `clarification_needed` with top candidate elements directly to the orchestrating LLM via the MCP protocol. No local Ollama required.
 3. **DOM Locator Strategy**:
+   - Exact-match prioritized locator patterns (`^\s*...\s*$`) to eliminate substring collisions (e.g. `'new'` matching `'Hacker News'`).
    - Heuristic cookie and consent overlay auto-dismissal.
    - Unicode icon character normalization (`\ue000-\uf8ff` stripping).
    - Input role filtering (`require_input_only` for text fill operations).
