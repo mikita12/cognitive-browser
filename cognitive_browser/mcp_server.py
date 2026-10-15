@@ -16,13 +16,11 @@ from .security import mask_sensitive_value, validate_url
 
 SERVER_INSTRUCTIONS = (
     "Cognitive Browser is a high-speed, zero-token browser automation server powered by local Reflex NLI (DeBERTa-v3 on GPU/CPU).\n\n"
-    "## Strict Knowledge & Content Extraction Rules:\n"
-    "1. NEVER call `read_url_content` or fetch raw HTML. Raw HTML pages are bloated with CSS, JS, and trackers, burning millions of tokens.\n"
-    "   Cognitive Browser provides 100% of the page's knowledge, article text, headings, and interactive elements through clean ARIA snapshots.\n"
-    "2. Reading Page Content: `cognitive_browse` automatically returns `page_content_snippet` containing the main headings and article text of the final destination page.\n"
-    "   To inspect full or detailed article text, call `get_aria_snapshot(selector='main')` or `get_aria_snapshot(selector='body')`. The returned `aria_tree` contains all headings, paragraphs, and list items in clean, compact YAML format.\n"
-    "3. Automated Navigation & Interaction: Execute planned multi-step navigation using `cognitive_browse(url=..., steps=[...])`.\n"
-    "   Routine clicks and form inputs are executed in sub-50ms with 0 tokens. If Reflex Core encounters ambiguity or confidence is below threshold, it returns 'clarification_needed' with `top_candidates`. Inspect the candidates and call `smart_action` to complete the action."
+    "## Autonomous Plan-and-Delegate Paradigm (Zero Cloud Tokens):\n"
+    "1. PLANNING: Inspect initial page state with `get_aria_snapshot(url=...)` or formulate a complete multi-step plan upfront.\n"
+    "2. DELEGATION: Send the complete sequence of actions to `cognitive_browse(url=..., steps=[...])`. Reflex Core executes the entire plan locally on GPU in seconds with ZERO LLM tokens. DO NOT turn-by-turn micromanage; the LLM sleeps while Reflex executes.\n"
+    "3. ESCALATION & PLAN UPDATE: If Reflex encounters ambiguity (confidence < threshold), execution pauses and returns `clarification_needed` with `completed_steps` and `top_candidates`. The LLM wakes up, updates the remaining plan, and calls `cognitive_browse(steps=[...])` (without reloading) or `smart_action` to seamlessly resume autonomous execution on the current page.\n"
+    "4. COMPLETION: When steps finish, `cognitive_browse` returns `status: 'success'` along with `page_content_snippet` (the destination page content). Synthesize your final answer in a single turn. NEVER read raw HTML or call `read_url_content`."
 )
 
 mcp = MCPServer(
@@ -46,31 +44,45 @@ def get_services() -> tuple[ReflexCore, BrowserEngine]:
 
 
 @mcp.tool()
-async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def cognitive_browse(
+    url: Optional[str] = None,
+    steps: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """
-    Executes a multi-step web workflow autonomously in a single turn.
-
-    CRITICAL RULES FOR AGENTS:
-    1. NEVER call this tool with empty steps (`"steps": []`).
-    2. DO NOT perform manual turn-by-turn ReAct loops by inspecting snapshots after every step.
-    3. Formulate the COMPLETE sequence of steps upfront in the `steps` list.
-       Example: [{"instruction": "Search input", "fill_value": "news"}, {"instruction": "Search submit button"}, {"instruction": "first result link"}]
-    4. Routine steps execute locally on GPU via Reflex Core (~25ms/step, ZERO cloud tokens) in ~3-5 seconds total.
-    5. Only if the result status is 'clarification_needed' should you intervene to resolve the ambiguous step with `smart_action`.
+    Executes a multi-step web workflow autonomously using local Reflex NLI on GPU.
+    Executes entirely on GPU with 0 LLM tokens. The orchestrator LLM sleeps while Reflex runs.
 
     Args:
-        url: Target web page URL to open.
-        steps: List of action steps with 'instruction' (and optional 'fill_value').
+        url: Optional target web page URL to open. If omitted, continues execution on the currently active page.
+        steps: Optional list of action steps with 'instruction' (and optional 'fill_value'). If empty/omitted and url is provided, loads the page and returns its initial ARIA state for planning.
     """
     global _last_candidates
-    validated_url = validate_url(url)
     reflex, engine = get_services()
     page = await engine.get_page()
 
     t_start = time.perf_counter()
-    await page.goto(validated_url, wait_until="domcontentloaded", timeout=20000)
-    await page.wait_for_timeout(1000)
-    await engine.auto_dismiss_overlays(page)
+
+    if url:
+        validated_url = validate_url(url)
+        await page.goto(validated_url, wait_until="domcontentloaded", timeout=20000)
+        await page.wait_for_timeout(1000)
+        await engine.auto_dismiss_overlays(page)
+
+    # If no steps provided, load page and return initial ARIA state for orchestrator to formulate plan
+    if not steps:
+        snapshot_yaml = await page.aria_snapshot()
+        candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=50)
+        _last_candidates = candidates
+        return {
+            "status": "ready_for_plan",
+            "current_url": page.url,
+            "current_title": await page.title(),
+            "candidates_count": len(candidates),
+            "candidates": candidates,
+            "aria_tree": snapshot_yaml,
+            "message": "Page loaded. Please formulate the complete plan (list of steps) for DeBERTa to execute autonomously.",
+            "execution_seconds": round(time.perf_counter() - t_start, 2),
+        }
 
     steps_log: List[Dict[str, Any]] = []
     total_reflex_gpu_ms = 0.0
@@ -96,6 +108,7 @@ async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, A
         # 3. Check confidence: if ambiguous -> escalate to orchestrating agent
         if decision.get("should_escalate") or decision.get("target_ref") == "NONE":
             top_candidates = decision.get("ranked_candidates", [])[:5]
+            remaining_steps = steps[idx:]
             return {
                 "status": "clarification_needed",
                 "completed_steps": idx,
@@ -104,9 +117,11 @@ async def cognitive_browse(url: str, steps: List[Dict[str, Any]]) -> Dict[str, A
                 "pending_step": instruction,
                 "confidence": decision.get("confidence", 0.0),
                 "top_candidates": top_candidates,
+                "remaining_steps": remaining_steps,
                 "message": (
                     f"Reflex Core confidence ({decision.get('confidence', 0.0):.2f}) is below threshold for step: '{instruction}'. "
-                    f"Please inspect 'top_candidates' and call smart_action with the chosen target_ref or target_name to continue."
+                    f"Inspect 'top_candidates' and update the plan: call cognitive_browse(steps=[...]) with updated steps to resume autonomous execution, "
+                    f"or call smart_action(target_ref=...) to resolve this single step."
                 ),
                 "telemetry": {
                     "execution_seconds": round(time.perf_counter() - t_start, 2),
@@ -287,17 +302,19 @@ async def smart_action(
 
 @mcp.tool()
 async def get_aria_snapshot(
+    url: Optional[str] = None,
     max_candidates: int = 40,
     selector: str = "body",
     include_aria_tree: bool = True,
     max_tree_lines: int = 150,
 ) -> Dict[str, Any]:
     """
-    Returns the condensed Accessibility Tree (ARIA snapshot) of the current page.
+    Returns the condensed Accessibility Tree (ARIA snapshot) of the current or specified page.
     Includes readable semantic content (headings, paragraphs, text, lists) and interactive candidates.
     NEVER use read_url_content or fetch raw HTML; all page knowledge is present directly in this ARIA snapshot.
 
     Args:
+        url: Optional target URL to open before capturing snapshot. If omitted, captures current active page.
         max_candidates: Maximum number of interactive candidates to extract for smart_action.
         selector: CSS selector to scope snapshot (e.g. 'main', 'article', or 'body'). Default 'body'.
         include_aria_tree: Whether to include the readable ARIA YAML tree text. Default True.
@@ -308,6 +325,12 @@ async def get_aria_snapshot(
     page = await engine.get_page()
 
     t_start = time.perf_counter()
+
+    if url:
+        validated_url = validate_url(url)
+        await page.goto(validated_url, wait_until="domcontentloaded", timeout=20000)
+        await page.wait_for_timeout(1000)
+        await engine.auto_dismiss_overlays(page)
     loc = page.locator(selector)
     if await loc.count() == 0:
         loc = page.locator("body")
