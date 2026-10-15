@@ -226,10 +226,11 @@ class TestSSRFRedirectGuards(unittest.IsolatedAsyncioTestCase):
 
     async def test_multihop_redirect_to_loopback_diagnostics_and_behavior(self):
         """
-        Empirically test multi-hop redirect behavior (exempt -> exempt -> private Server B).
+        Empirically test multi-hop redirect behavior (exempt -> exempt -> private Server B)
+        using production setup_ssrf_route_guard.
 
-        Diagnostic findings:
-        1. Hop 1 (/multi-hop-loopback-1): Intercepted by context.route.
+        Known limitation demonstrated by this test:
+        1. Hop 1 (/multi-hop-loopback-1): Intercepted by context.route via setup_ssrf_route_guard.
            The route guard inspects the 302 response and finds Location=/multi-hop-loopback-2.
            Because /multi-hop-loopback-2 belongs to exempt_origins (Server A), route.fulfill(302) is called.
         2. Hop 2 (/multi-hop-loopback-2): Dispatched by Chromium following the 302 response.
@@ -237,46 +238,26 @@ class TestSSRFRedirectGuards(unittest.IsolatedAsyncioTestCase):
            Playwright automatically calls Fetch.continueRequest and DOES NOT create a user RouteImpl.
            Therefore, Hop 2 and the subsequent redirect to Server B completely bypass context.route.
         3. Result: Server B receives the request (hits == 1).
-           This test asserts and proves this exact CDP architectural limitation.
+           This test asserts and proves this exact Playwright context.route architectural limitation.
         """
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context()
 
             intercepted_urls = []
+            original_route = context.route
 
-            async def route_probe(route):
-                intercepted_urls.append(route.request.url)
-                # Pass to standard SSRF route interceptor logic
-                req = route.request
-                url = req.url
-                is_exempt = is_exempt_origin(url, {self.base_url})
-                if not is_exempt:
-                    try:
-                        validate_url(url)
-                    except SecurityError:
-                        await route.abort("blockedbyclient")
-                        return
+            async def route_spy(pattern, handler):
+                async def wrapped_handler(route):
+                    intercepted_urls.append(route.request.url)
+                    return await handler(route)
 
-                try:
-                    resp = await route.fetch(max_redirects=0)
-                    if resp.status in (301, 302, 303, 307, 308):
-                        loc = resp.headers.get("location")
-                        if loc:
-                            import urllib.parse
+                return await original_route(pattern, wrapped_handler)
 
-                            target = urllib.parse.urljoin(url, loc)
-                            if not is_exempt_origin(target, {self.base_url}):
-                                try:
-                                    validate_url(target)
-                                except SecurityError:
-                                    await route.abort("blockedbyclient")
-                                    return
-                    await route.fulfill(response=resp)
-                except Exception:
-                    await route.abort("blockedbyclient")
+            context.route = route_spy
 
-            await context.route("**/*", route_probe)
+            # Run production setup_ssrf_route_guard
+            await setup_ssrf_route_guard(context, exempt_origins={self.base_url})
             page = await context.new_page()
 
             # Execute multi-hop navigation
@@ -293,12 +274,41 @@ class TestSSRFRedirectGuards(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(
                 InternalSecretHandler.hits,
                 1,
-                "Server B was hit because secondary redirect hops bypass context.route in Playwright CDP",
+                "Known limitation: Server B was hit because secondary redirect hops bypass context.route in Playwright CDP",
             )
             self.assertIsNotNone(resp)
             assert resp is not None
             self.assertEqual(resp.status, 200)
             self.assertIn(str(self.server_b_port), page.url)
+            await browser.close()
+
+    @unittest.expectedFailure
+    async def test_target_multihop_redirect_blocked_by_future_proxy(self):
+        """
+        Target specification for multi-hop redirect protection (public -> public -> private).
+        Desired security behavior: multi-hop redirect chains terminating in a private IP
+        must be aborted before connection, resulting in 0 hits on the private server.
+
+        Current status: expectedFailure.
+        Under Playwright's context.route architecture, secondary redirect hops bypass route
+        interception. This test will only pass once a connection-level egress validation
+        mechanism (e.g. local forward proxy via --proxy-server validating IP addresses upon
+        connection) is implemented.
+        """
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context()
+            await setup_ssrf_route_guard(context, exempt_origins={self.base_url})
+            page = await context.new_page()
+
+            with self.assertRaises(Exception):
+                await page.goto(f"{self.base_url}/multi-hop-loopback-1", timeout=5000)
+
+            self.assertEqual(
+                InternalSecretHandler.hits,
+                0,
+                "Desired behavior: Server B must not receive any requests",
+            )
             await browser.close()
 
     async def test_multihop_redirect_to_metadata_mock_behavior(self):
@@ -475,7 +485,9 @@ class TestSSRFRedirectGuards(unittest.IsolatedAsyncioTestCase):
     async def test_websocket_to_private_is_aborted(self):
         """
         Verify WebSocket handshakes to private/loopback addresses are intercepted and aborted.
+        Asserts hits == 0 on Server B so that error/closed cannot be attributed to HTTP handshake rejection.
         """
+        InternalSecretHandler.hits = 0
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(service_workers="block")
@@ -496,6 +508,11 @@ class TestSSRFRedirectGuards(unittest.IsolatedAsyncioTestCase):
                 }});
             }}""")
             self.assertIn(ws_status, ("error", "closed"))
+            self.assertEqual(
+                InternalSecretHandler.hits,
+                0,
+                "Server B must receive 0 requests; WebSocket handshake aborted by client-side guard",
+            )
             await browser.close()
 
     def test_dns_rebinding_simulation(self):
