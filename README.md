@@ -13,14 +13,14 @@ By resolving routine element interactions through Natural Language Inference (NL
 ## Benchmark: 15-Case Web Automation Performance
 
 > **Methodology Notice:**
-> The metrics below reflect empirical execution of pre-scripted multi-step workflows across 15 real-world web applications on NVIDIA GeForce RTX 4070 Ti (CUDA). Upstream planning tokens (formulating the initial sequence of steps) are **not included**. For full hardware specifications, per-task breakdowns, and token accounting definitions, read [docs/benchmark-methodology.md](docs/benchmark-methodology.md).
+> The 15 scripted tasks in this suite serve as an automated **regression benchmark** to verify routing and execution accuracy across diverse layouts, **not** as proof of general browsing competence. Upstream planning tokens (formulating the initial sequence of steps from high-level natural language goals) are **not included**. Measured on NVIDIA GeForce RTX 4070 Ti (CUDA, 12 GB VRAM). Note that for a sample size of $n = 32$ interaction steps, the 95th percentile ($p95$) is approximate. For full hardware specifications, per-task breakdowns, and token accounting definitions, read [docs/benchmark-methodology.md](docs/benchmark-methodology.md).
 
 | Metric | Measured Absolute Value | Measurement Scope & Definition |
 |---|:---:|---|
-| **Task Completion** | **15 / 15 (100%)** | Full execution to completion across all 15 real-world live workflows |
-| **Reflex Step Inference Latency (CUDA)** | **24.9 ms** (median) / **64.6 ms** (p95) | Tensor forward pass per interaction step (n = 32 steps, range: 5.6–95.5 ms) |
+| **Task Completion** | **15 / 15 (100%)** | Full execution to completion across all 15 real-world live workflows (regression suite) |
+| **Reflex Step Inference Latency (CUDA)** | **24.9 ms** (median) / **64.6 ms** (p95) | Tensor forward pass per interaction step ($n = 32$ steps, range: 5.6–95.5 ms; p95 is approximate at this sample size) |
 | **Average Task Duration** | **5.37 s** | Total wall-clock time per task (browser navigation, overlays, and actions) |
-| **Total Interaction Tokens (15 tasks)** | **4,300 tokens** | Combined across all 15 tasks (13 tasks used 0 LLM tokens; 2 required Cortex escalation) |
+| **LLM Token Consumption** | **0 tokens** (13 tasks) / **285 & 1,347 tokens** (2 tasks) | 13 tasks completed with 0 LLM tokens; 2 tasks required Cortex LLM escalation (Hacker News: 285 tok., MPK: 1,347 tok.) |
 
 ### Results & Calibration Data
 - **15-Case Benchmark Details:** Empirical run logs and hardware setup in [docs/benchmark-methodology.md](docs/benchmark-methodology.md) (raw results: [`benchmarks/benchmark_15_cases_results.json`](benchmarks/benchmark_15_cases_results.json) | summary script: [`benchmarks/summarize_results.py`](benchmarks/summarize_results.py)).

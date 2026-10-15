@@ -6,7 +6,11 @@ This document details the setup, evaluation criteria, token accounting, and limi
 
 ## 1. Objective and Overview
 
-The benchmark evaluates the performance of **Cognitive Browser** (Reflex Core DeBERTa-v3 + Cortex Engine LLM escalation) against a standard agent loop model (Playwright MCP with repeated accessibility snapshots sent to a frontier LLM on every step).
+The benchmark evaluates the performance of **Cognitive Browser** (Reflex Core DeBERTa-v3 + Cortex Engine LLM escalation) across structured web automation workflows.
+
+> [!NOTE]
+> **Scope & Nature of Benchmark Suite:**
+> The 15 scripted tasks in this suite serve as an automated **regression benchmark** to empirically verify semantic routing and locator accuracy across diverse web DOM architectures, **not** as proof of general autonomous browsing competence. In production, formulating an open-ended goal into concrete step actions requires an upstream reasoning agent.
 
 ---
 
@@ -14,14 +18,14 @@ The benchmark evaluates the performance of **Cognitive Browser** (Reflex Core De
 
 - **Hardware Platform:**
   - GPU: NVIDIA GeForce RTX 4070 Ti (12GB VRAM)
-  - Driver & CUDA: Linux x86_64, CUDA 12.x
+  - Driver & CUDA: Linux x86_64, Driver 580.x, CUDA 13.0
   - Host CPU: AMD Ryzen 9
 - **Reflex Core Model:**
   - `cross-encoder/nli-deberta-v3-small` (140M parameters)
   - Hosted locally via PyTorch (`transformers` AutoModelForSequenceClassification)
   - Precision: FP32 / FP16 depending on torch defaults
   - Inference mode: Zero-shot NLI Softmax between Entailment and Contradiction logits
-  - Measured inference latency on CUDA: **24.9 ms median, 64.6 ms p95** (range: 5.6–95.5 ms, n = 32 interaction steps)
+  - Measured inference latency on CUDA: **24.9 ms median, 64.6 ms p95** (range: 5.6–95.5 ms, $n = 32$ interaction steps; note that at $n = 32$, $p95$ is approximate)
 - **Cortex Escalation Model:**
   - `qwen2.5:1.5b` served locally via Ollama (`http://localhost:11434/api/generate`)
   - Invoked strictly when Reflex confidence is below the escalation threshold ($< 0.50$) or when an element match cannot be found.
@@ -71,10 +75,12 @@ If any intermediate step fails or times out without successful escalation recove
 > **Planning Tokens Disclosure:** The benchmark measures the execution of pre-specified multi-step instruction arrays passed to the browser tool. It **does NOT** include tokens that an upstream planning agent (e.g., Claude 3.5 Sonnet or GPT-4o) would expend to initially formulate the list of steps.
 
 ### What is INCLUDED in Cognitive Browser Token Count:
-- **MCP tool call overhead:** An estimate of the JSON parameter payload for the tool invocation:
+- **Reflex Core Steps:** Consume **0 LLM tokens** (local cross-encoder tensor forward pass). **13 out of 15 tasks completed consuming 0 LLM tokens**.
+- **Cortex Escalation Tokens:** When Reflex confidence falls below the threshold, Cortex is invoked. All tokens (`prompt_eval_count` + `eval_count` reported by Ollama) are tracked and added directly to the total token count. In the 15-task suite, exactly 2 tasks triggered Cortex escalation:
+  - **Hacker News (Task 06):** 1 escalation turn, consuming **285 tokens** (450 total with step representation).
+  - **MPK Wrocław (Task 15):** 1 escalation turn, consuming **1,347 tokens** (1,513 total with step representation).
+- **JSON parameter overhead:** An estimate of the JSON parameter payload for the tool invocation:
   $$\text{JSON overhead} = 150 + \left\lfloor \frac{\text{len}(\text{json\_steps})}{3.5} \right\rfloor$$
-- **Cortex Escalation Tokens:** When Reflex confidence falls below the threshold, Cortex is invoked. All tokens (`prompt_eval_count` + `eval_count` reported by Ollama) are tracked and added directly to the total token count.
-- **Reflex Core Steps:** Consume **0 LLM tokens** (local cross-encoder tensor forward pass).
 
 ### What is EXCLUDED from Cognitive Browser Token Count:
 - Upstream agent prompt tokens (system prompts, user conversation history, and high-level reasoning prior to tool calling).
