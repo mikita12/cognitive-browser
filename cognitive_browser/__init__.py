@@ -1,10 +1,13 @@
 """
 Cognitive Browser (v0.2.0): High-speed, token-efficient browser automation MCP server.
-Combines local zero-token NLI (Reflex Core) with orchestrating LLM escalation.
+Combines local zero-token Cross-Encoder / NLI (Reflex Core) with RouteCache and orchestrating LLM escalation.
 """
 
 from .browser import BrowserEngine
-from .config import get_confidence_threshold
+from .cache import RouteCache
+from .captcha import CaptchaResolver
+from .config import get_capsolver_api_key, get_confidence_threshold, get_reflex_model
+from .cookies import extract_firefox_cookies, find_firefox_profiles, import_system_cookies
 from .reflex import AriaElementParser, ReflexCore
 from .security import (
     SecurityError,
@@ -28,6 +31,8 @@ __version__ = "0.2.0"
 __all__ = [
     "ReflexCore",
     "BrowserEngine",
+    "RouteCache",
+    "CaptchaResolver",
     "AriaElementParser",
     "DebertaDecisionRouter",
     "ApiDecisionRouter",
@@ -39,4 +44,9 @@ __all__ = [
     "SecurityError",
     "mask_sensitive_value",
     "get_confidence_threshold",
+    "get_reflex_model",
+    "get_capsolver_api_key",
+    "extract_firefox_cookies",
+    "find_firefox_profiles",
+    "import_system_cookies",
 ]

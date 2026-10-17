@@ -1,0 +1,65 @@
+{
+  "benchmark_metadata": {
+    "total_instances": 1000,
+    "seed": 42,
+    "device": "cuda",
+    "model_name": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+    "total_execution_seconds": 3.5,
+    "throughput_instances_per_second": 285.9,
+    "vram_initial_mb": 234.31,
+    "vram_final_mb": 234.31,
+    "vram_delta_mb": 0.0
+  },
+  "latency_metrics": {
+    "mean_ms": 3.37,
+    "p50_ms": 3.65,
+    "p95_ms": 4.36,
+    "p99_ms": 4.72
+  },
+  "category_metrics": {
+    "contextual_nth_ecommerce": {
+      "top1_routing_accuracy": 1.0,
+      "top3_recall": 1.0,
+      "action_plan_accuracy": 1.0,
+      "mean_latency_ms": 4.25
+    },
+    "search_and_action_plan": {
+      "top1_routing_accuracy": 1.0,
+      "top3_recall": 1.0,
+      "action_plan_accuracy": 1.0,
+      "value_extraction_accuracy": 1.0,
+      "mean_latency_ms": 3.85
+    },
+    "page_satisfaction_state": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "confusion_matrix": {
+        "tp": 100,
+        "tn": 100,
+        "fp": 0,
+        "fn": 0
+      },
+      "mean_latency_ms": 2.99
+    },
+    "captcha_browser_state": {
+      "accuracy": 1.0,
+      "true_positive_rate": 1.0,
+      "false_positive_rate": 0.0,
+      "captcha_type_accuracy": 1.0,
+      "confusion_matrix": {
+        "tp": 100,
+        "tn": 100,
+        "fp": 0,
+        "fn": 0
+      },
+      "mean_latency_ms": 1.86
+    },
+    "adversarial_impossible": {
+      "rejection_rate_tnr": 1.0,
+      "false_positive_clicks": 0,
+      "mean_latency_ms": 3.89
+    }
+  }
+}

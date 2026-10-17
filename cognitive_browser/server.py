@@ -1,7 +1,7 @@
 """
-Cognitive Browser Microservice (Reflex Core + Playwright + DeBERTa-v3).
-Universal containerized microservice exposing the local decision engine
-via both REST API and Model Context Protocol (MCP) for AI agents.
+Cognitive Browser Microservice (v0.3.0).
+Universal containerized microservice exposing the local decision engine (ModernBERT/Reflex Core)
+via both REST API and Model Context Protocol (MCP) for AI agents with automated CAPTCHA resolution.
 """
 
 import os
@@ -18,11 +18,12 @@ from playwright.async_api import Browser, async_playwright
 from pydantic import BaseModel, Field
 
 from .browser import BrowserEngine
+from .config import get_reflex_model
 from .reflex import AriaElementParser, ReflexCore
 from .security import SecurityError, mask_sensitive_value, setup_ssrf_route_guard, validate_url
 
 # Environment configuration
-MODEL_NAME = os.getenv("MODEL_NAME", "cross-encoder/nli-deberta-v3-small")
+MODEL_NAME = get_reflex_model()
 DEVICE = os.getenv(
     "DEVICE",
     "cuda"
@@ -135,10 +136,18 @@ class StepInstruction(BaseModel):
     fill_value: Optional[str] = None
 
 
+class BindPayloadRequest(BaseModel):
+    payload: Dict[str, Any] = Field(..., description="Key-value pairs to bind to form elements")
+    candidates: List[Dict[str, Any]] = Field(..., description="ARIA snapshot candidates")
+    min_confidence: float = Field(0.30, description="Minimum confidence threshold")
+
+
 class BrowseTaskRequest(BaseModel):
     url: str
     steps: Optional[List[StepInstruction]] = None
     goal: Optional[str] = None
+    payload: Optional[Dict[str, Any]] = None
+    browser_context: Optional[str] = "ephemeral"
     session_id: Optional[str] = "default"
     timeout_ms: int = 20000
 
@@ -180,9 +189,26 @@ async def evaluate_candidates(req: EvaluateRequest):
     return decision
 
 
+@app.post("/v1/bind_payload")
+async def bind_payload(req: BindPayloadRequest):
+    """Neural semantic bipartite matching of user payload to form elements."""
+    if not router_instance:
+        raise HTTPException(status_code=503, detail="NLI model is not initialized")
+
+    t0 = time.perf_counter()
+    actions = router_instance.bind_payload_to_elements(
+        payload=req.payload, candidates=req.candidates, min_confidence=req.min_confidence
+    )
+    return {
+        "matched_actions": actions,
+        "actions_count": len(actions),
+        "endpoint_latency_ms": round((time.perf_counter() - t0) * 1000, 2),
+    }
+
+
 @app.post("/v1/snapshot")
 async def take_aria_snapshot(req: SnapshotRequest):
-    """Navigates to URL and returns clean semantic ARIA accessibility tree and candidates."""
+    """Navigates to URL and returns clean semantic ARIA accessibility tree, candidates, and CAPTCHA state."""
     try:
         clean_url = validate_url(req.url)
     except SecurityError as se:
@@ -205,12 +231,30 @@ async def take_aria_snapshot(req: SnapshotRequest):
         snapshot_yaml = await page.aria_snapshot()
         candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=req.max_candidates)
 
+        # Evaluate CAPTCHA state & auto-resolve if present
+        captcha_state: Optional[Dict[str, Any]] = None
+        if router_instance and hasattr(router_instance, "evaluate_captcha_presence"):
+            captcha_state = router_instance.evaluate_captcha_presence(
+                candidates=candidates,
+                page_title=await page.title(),
+                page_url=page.url,
+                snapshot_yaml=snapshot_yaml,
+            )
+            if captcha_state.get("is_captcha") and engine_instance:
+                resolve_res = await engine_instance.auto_resolve_captcha_if_present(page)
+                captcha_state["resolve_result"] = resolve_res
+                if resolve_res.get("solved"):
+                    await page.wait_for_timeout(1000)
+                    snapshot_yaml = await page.aria_snapshot()
+                    candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=req.max_candidates)
+
         return {
             "url": page.url,
             "title": await page.title(),
             "raw_snapshot": snapshot_yaml,
             "candidates_count": len(candidates),
             "candidates": candidates,
+            "captcha_state": captcha_state,
             "latency_ms": round((time.perf_counter() - t0) * 1000, 2),
         }
     finally:
@@ -221,7 +265,7 @@ async def take_aria_snapshot(req: SnapshotRequest):
 async def execute_browse_task(req: BrowseTaskRequest):
     """
     Multi-step browser execution using Reflex Core decision engine.
-    Supports sequences of instructions or high-level goals.
+    Supports sequences of instructions, high-level goals, and automated CAPTCHA resolution.
     """
     try:
         clean_url = validate_url(req.url)
@@ -235,8 +279,20 @@ async def execute_browse_task(req: BrowseTaskRequest):
     page = await browser_instance.new_page(service_workers="block")
     await setup_ssrf_route_guard(page.context)
     steps_log: List[Dict[str, Any]] = []
+    captcha_state: Optional[Dict[str, Any]] = None
 
     try:
+        # Import cookies if browser_context is enabled
+        if req.browser_context and req.browser_context != "ephemeral":
+            import urllib.parse
+
+            parsed = urllib.parse.urlparse(clean_url)
+            target_domain = parsed.hostname or clean_url
+            if hasattr(engine_instance, "import_cookies_for_domain"):
+                await engine_instance.import_cookies_for_domain(
+                    page, domain=target_domain, browser_type=req.browser_context
+                )
+
         print(f"\n[BrowseTask] Navigating to: {clean_url}")
         await page.goto(clean_url, wait_until="domcontentloaded", timeout=req.timeout_ms)
         await page.wait_for_timeout(1000)
@@ -245,6 +301,42 @@ async def execute_browse_task(req: BrowseTaskRequest):
         dismissed = await engine_instance.auto_dismiss_overlays(page)
         if dismissed:
             steps_log.append({"step": "auto_dismiss_cookies", "status": "dismissed"})
+
+        # Execute payload parameter binding if provided
+        if req.payload:
+            payload_snap = await page.aria_snapshot()
+            payload_cands = AriaElementParser.parse_snapshot(payload_snap, max_candidates=100)
+            bound_actions = router_instance.bind_payload_to_elements(payload=req.payload, candidates=payload_cands)
+            for b_act in bound_actions:
+                act_desc = await engine_instance.execute_reflex_action(page, b_act)
+                steps_log.append({
+                    "step": f"payload_bind:{b_act.get('payload_key')}",
+                    "element": f"[{b_act.get('role')}] {b_act.get('name')}",
+                    "action": act_desc,
+                    "confidence": b_act.get("confidence"),
+                })
+
+        # Initial CAPTCHA evaluation and auto-resolve
+        if hasattr(router_instance, "evaluate_captcha_presence"):
+            init_snap = await page.aria_snapshot()
+            captcha_state = router_instance.evaluate_captcha_presence(
+                candidates=AriaElementParser.parse_snapshot(init_snap, max_candidates=50),
+                page_title=await page.title(),
+                page_url=page.url,
+                snapshot_yaml=init_snap,
+            )
+            if captcha_state.get("is_captcha"):
+                c_res = await engine_instance.auto_resolve_captcha_if_present(page)
+                captcha_state["resolve_result"] = c_res
+                steps_log.append(
+                    {
+                        "step": "auto_resolve_captcha",
+                        "status": "resolved" if c_res.get("solved") else "failed",
+                        "details": c_res,
+                    }
+                )
+                if c_res.get("solved"):
+                    await page.wait_for_timeout(1000)
 
         # Execute defined steps
         if req.steps:
@@ -256,6 +348,26 @@ async def execute_browse_task(req: BrowseTaskRequest):
                 candidates = AriaElementParser.parse_snapshot(
                     snapshot_yaml, max_candidates=50, require_input_only=bool(s.fill_value)
                 )
+
+                # Step-level CAPTCHA check
+                if hasattr(router_instance, "evaluate_captcha_presence"):
+                    step_c_eval = router_instance.evaluate_captcha_presence(
+                        candidates=candidates,
+                        page_title=await page.title(),
+                        page_url=page.url,
+                        snapshot_yaml=snapshot_yaml,
+                    )
+                    if step_c_eval.get("is_captcha"):
+                        step_c_res = await engine_instance.auto_resolve_captcha_if_present(page)
+                        step_c_eval["resolve_result"] = step_c_res
+                        captcha_state = step_c_eval
+                        if step_c_res.get("solved"):
+                            await page.wait_for_timeout(1000)
+                            snapshot_yaml = await page.aria_snapshot()
+                            candidates = AriaElementParser.parse_snapshot(
+                                snapshot_yaml, max_candidates=50, require_input_only=bool(s.fill_value)
+                            )
+
                 decision = router_instance.evaluate_candidates(intent=s.instruction, candidates=candidates)
                 if decision.get("should_escalate") or decision.get("target_ref") == "NONE":
                     steps_log.append({"instruction": s.instruction, "executed": False, "error": "Escalation needed"})
@@ -268,9 +380,16 @@ async def execute_browse_task(req: BrowseTaskRequest):
                     await engine_instance.click_element(page, role=best["role"], name=best["name"])
 
                 await page.wait_for_timeout(500)
-                steps_log.append(
-                    {"instruction": s.instruction, "executed": True, "target": f"[{best['role']}] {best['name']}"}
-                )
+                step_log_item: Dict[str, Any] = {
+                    "instruction": s.instruction,
+                    "executed": True,
+                    "target": f"[{best['role']}] {best['name']}",
+                }
+                c_sol = await engine_instance.auto_resolve_captcha_if_present(page)
+                if c_sol.get("detected") and c_sol.get("solved"):
+                    step_log_item["captcha_solved"] = c_sol
+                    captcha_state = {"is_captcha": True, "resolve_result": c_sol}
+                steps_log.append(step_log_item)
 
         # Final snapshot after execution
         current_snapshot = await page.aria_snapshot()
@@ -279,6 +398,7 @@ async def execute_browse_task(req: BrowseTaskRequest):
             "initial_url": req.url,
             "final_url": page.url,
             "final_title": await page.title(),
+            "captcha_state": captcha_state,
             "steps_executed": len(steps_log),
             "steps_log": steps_log,
             "final_aria_snapshot": current_snapshot[:1500] + "... (truncated)",
@@ -288,6 +408,7 @@ async def execute_browse_task(req: BrowseTaskRequest):
         return {
             "status": "error",
             "error": str(e),
+            "captcha_state": captcha_state,
             "steps_log": steps_log,
             "total_task_time_ms": round((time.perf_counter() - t0) * 1000, 2),
         }
