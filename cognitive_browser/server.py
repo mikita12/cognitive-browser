@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from .browser import BrowserEngine
 from .config import get_reflex_model
+from .orchestrator import BrowserOrchestrator
 from .reflex import AriaElementParser, ReflexCore
 from .security import SecurityError, mask_sensitive_value, setup_ssrf_route_guard, validate_url
 
@@ -266,6 +267,7 @@ async def execute_browse_task(req: BrowseTaskRequest):
     """
     Multi-step browser execution using Reflex Core decision engine.
     Supports sequences of instructions, high-level goals, and automated CAPTCHA resolution.
+    Delegates multi-hop execution loop to BrowserOrchestrator.
     """
     try:
         clean_url = validate_url(req.url)
@@ -278,138 +280,43 @@ async def execute_browse_task(req: BrowseTaskRequest):
     t0 = time.perf_counter()
     page = await browser_instance.new_page(service_workers="block")
     await setup_ssrf_route_guard(page.context)
-    steps_log: List[Dict[str, Any]] = []
-    captcha_state: Optional[Dict[str, Any]] = None
 
     try:
-        # Import cookies if browser_context is enabled
-        if req.browser_context and req.browser_context != "ephemeral":
-            import urllib.parse
+        dict_steps = (
+            [s.model_dump() if hasattr(s, "model_dump") else dict(s) for s in req.steps]
+            if req.steps
+            else None
+        )
+        orchestrator = BrowserOrchestrator(engine=engine_instance, reflex=router_instance)
+        res = await orchestrator.browse(
+            page,
+            url=clean_url,
+            goal=req.goal,
+            steps=dict_steps,
+            payload=req.payload,
+            browser_context=req.browser_context,
+            timeout_ms=req.timeout_ms,
+        )
 
-            parsed = urllib.parse.urlparse(clean_url)
-            target_domain = parsed.hostname or clean_url
-            if hasattr(engine_instance, "import_cookies_for_domain"):
-                await engine_instance.import_cookies_for_domain(
-                    page, domain=target_domain, browser_type=req.browser_context
-                )
-
-        print(f"\n[BrowseTask] Navigating to: {clean_url}")
-        await page.goto(clean_url, wait_until="domcontentloaded", timeout=req.timeout_ms)
-        await page.wait_for_timeout(1000)
-
-        # Step 0: Auto-dismiss cookies/consent modals
-        dismissed = await engine_instance.auto_dismiss_overlays(page)
-        if dismissed:
-            steps_log.append({"step": "auto_dismiss_cookies", "status": "dismissed"})
-
-        # Execute payload parameter binding if provided
-        if req.payload:
-            payload_snap = await page.aria_snapshot()
-            payload_cands = AriaElementParser.parse_snapshot(payload_snap, max_candidates=100)
-            bound_actions = router_instance.bind_payload_to_elements(payload=req.payload, candidates=payload_cands)
-            for b_act in bound_actions:
-                act_desc = await engine_instance.execute_reflex_action(page, b_act)
-                steps_log.append({
-                    "step": f"payload_bind:{b_act.get('payload_key')}",
-                    "element": f"[{b_act.get('role')}] {b_act.get('name')}",
-                    "action": act_desc,
-                    "confidence": b_act.get("confidence"),
-                })
-
-        # Initial CAPTCHA evaluation and auto-resolve
-        if hasattr(router_instance, "evaluate_captcha_presence"):
-            init_snap = await page.aria_snapshot()
-            captcha_state = router_instance.evaluate_captcha_presence(
-                candidates=AriaElementParser.parse_snapshot(init_snap, max_candidates=50),
-                page_title=await page.title(),
-                page_url=page.url,
-                snapshot_yaml=init_snap,
-            )
-            if captcha_state.get("is_captcha"):
-                c_res = await engine_instance.auto_resolve_captcha_if_present(page)
-                captcha_state["resolve_result"] = c_res
-                steps_log.append(
-                    {
-                        "step": "auto_resolve_captcha",
-                        "status": "resolved" if c_res.get("solved") else "failed",
-                        "details": c_res,
-                    }
-                )
-                if c_res.get("solved"):
-                    await page.wait_for_timeout(1000)
-
-        # Execute defined steps
-        if req.steps:
-            for s in req.steps:
-                masked_fill = mask_sensitive_value(s.fill_value, instruction=s.instruction)
-                print(f'  -> Step: "{s.instruction}" (fill: {masked_fill})')
-
-                snapshot_yaml = await page.aria_snapshot()
-                candidates = AriaElementParser.parse_snapshot(
-                    snapshot_yaml, max_candidates=50, require_input_only=bool(s.fill_value)
-                )
-
-                # Step-level CAPTCHA check
-                if hasattr(router_instance, "evaluate_captcha_presence"):
-                    step_c_eval = router_instance.evaluate_captcha_presence(
-                        candidates=candidates,
-                        page_title=await page.title(),
-                        page_url=page.url,
-                        snapshot_yaml=snapshot_yaml,
-                    )
-                    if step_c_eval.get("is_captcha"):
-                        step_c_res = await engine_instance.auto_resolve_captcha_if_present(page)
-                        step_c_eval["resolve_result"] = step_c_res
-                        captcha_state = step_c_eval
-                        if step_c_res.get("solved"):
-                            await page.wait_for_timeout(1000)
-                            snapshot_yaml = await page.aria_snapshot()
-                            candidates = AriaElementParser.parse_snapshot(
-                                snapshot_yaml, max_candidates=50, require_input_only=bool(s.fill_value)
-                            )
-
-                decision = router_instance.evaluate_candidates(intent=s.instruction, candidates=candidates)
-                if decision.get("should_escalate") or decision.get("target_ref") == "NONE":
-                    steps_log.append({"instruction": s.instruction, "executed": False, "error": "Escalation needed"})
-                    break
-
-                best = decision["ranked_candidates"][0]
-                if s.fill_value:
-                    await engine_instance.fill_element(page, role=best["role"], name=best["name"], value=s.fill_value)
-                else:
-                    await engine_instance.click_element(page, role=best["role"], name=best["name"])
-
-                await page.wait_for_timeout(500)
-                step_log_item: Dict[str, Any] = {
-                    "instruction": s.instruction,
-                    "executed": True,
-                    "target": f"[{best['role']}] {best['name']}",
-                }
-                c_sol = await engine_instance.auto_resolve_captcha_if_present(page)
-                if c_sol.get("detected") and c_sol.get("solved"):
-                    step_log_item["captcha_solved"] = c_sol
-                    captcha_state = {"is_captcha": True, "resolve_result": c_sol}
-                steps_log.append(step_log_item)
-
-        # Final snapshot after execution
-        current_snapshot = await page.aria_snapshot()
+        final_snapshot = await page.aria_snapshot()
         return {
-            "status": "success",
+            "status": res.get("status", "success"),
             "initial_url": req.url,
-            "final_url": page.url,
-            "final_title": await page.title(),
-            "captcha_state": captcha_state,
-            "steps_executed": len(steps_log),
-            "steps_log": steps_log,
-            "final_aria_snapshot": current_snapshot[:1500] + "... (truncated)",
+            "final_url": res.get("final_url", page.url),
+            "final_title": res.get("final_title", await page.title()),
+            "captcha_state": None,
+            "steps_executed": res.get("steps_executed", len(res.get("steps_log", []))),
+            "steps_log": res.get("steps_log", []),
+            "final_aria_snapshot": final_snapshot[:1500] + "... (truncated)",
+            "page_content_snippet": res.get("page_content_snippet", ""),
             "total_task_time_ms": round((time.perf_counter() - t0) * 1000, 2),
         }
     except Exception as e:
         return {
             "status": "error",
             "error": str(e),
-            "captcha_state": captcha_state,
-            "steps_log": steps_log,
+            "captcha_state": None,
+            "steps_log": [],
             "total_task_time_ms": round((time.perf_counter() - t0) * 1000, 2),
         }
     finally:

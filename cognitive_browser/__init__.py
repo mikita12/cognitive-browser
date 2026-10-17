@@ -8,6 +8,7 @@ from .cache import RouteCache
 from .captcha import CaptchaResolver
 from .config import get_capsolver_api_key, get_confidence_threshold, get_reflex_model
 from .cookies import extract_firefox_cookies, find_firefox_profiles, import_system_cookies
+from .orchestrator import BrowserOrchestrator
 from .parser import AriaElementParser
 from .payload import PayloadBinder
 from .reflex import ReflexCore
@@ -37,6 +38,7 @@ __all__ = [
     "CaptchaResolver",
     "AriaElementParser",
     "PayloadBinder",
+    "BrowserOrchestrator",
     "DebertaDecisionRouter",
     "ApiDecisionRouter",
     "get_decision_router",
