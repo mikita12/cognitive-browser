@@ -404,3 +404,182 @@ class CaptchaResolver:
             "error": solve_res.get("error"),
             "latency_ms": (time.perf_counter() - t0) * 1000.0,
         }
+
+    @classmethod
+    def evaluate_presence(
+        cls,
+        candidates: List[Dict[str, Any]],
+        page_title: str = "",
+        page_url: str = "",
+        snapshot_yaml: str = "",
+        evaluator: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """
+        Evaluates the probability and type of CAPTCHA, Turnstile, or security challenge on the page.
+        Distinguishes active interstitial challenges from passive footer badges (e.g. 'Protected by reCAPTCHA').
+        Returns standardized state:
+        {"is_captcha": bool, "captcha_type": str, "confidence": float, "heuristic_trigger": bool,
+         "neural_score": float, "latency_ms": float, "matched_candidate": Optional[Dict]}
+        """
+        t0 = time.perf_counter()
+        lower_title = (page_title or "").lower()
+        lower_url = (page_url or "").lower()
+        lower_snap = (snapshot_yaml or "").lower()
+
+        # 1. Passive badge indicators (Google reCAPTCHA badge in footers / login forms)
+        passive_badge_indicators = [
+            "protected by recaptcha",
+            "chronione przez recaptcha",
+            "privacy policy and terms of service apply",
+            "privacy - terms",
+            "polityka prywatności i warunki korzystania",
+            "google privacy policy",
+            "terms of service apply",
+            "ta strona jest chroniona przez recaptcha",
+        ]
+        has_passive_badge = any(k in lower_snap for k in passive_badge_indicators)
+        if not has_passive_badge:
+            for c in candidates:
+                c_comb = f"{c.get('name', '')} {c.get('context', '')}".lower()
+                if any(k in c_comb for k in passive_badge_indicators):
+                    has_passive_badge = True
+                    break
+
+        # 2. Active challenge indicators
+        # Cloudflare interstitial / blocking page
+        cf_interstitial_indicators = [
+            "just a moment",
+            "attention required! | cloudflare",
+            "security check",
+            "checking your browser",
+            "sprawdza, czy nie jesteś botem",
+            "enable javascript and cookies to continue",
+        ]
+        is_cf_interstitial = any(k in lower_title for k in cf_interstitial_indicators) or (
+            "ray id" in lower_snap and any(k in lower_snap for k in ["cloudflare", "verify you are human", "moment"])
+        )
+
+        # Turnstile challenge (Cloudflare interactive widget)
+        turnstile_indicators = [
+            "challenges.cloudflare.com",
+            "cf-turnstile",
+            "turnstile",
+            "verify you are human",
+            "potwierdź, że jesteś człowiekiem",
+        ]
+        is_turnstile = any(k in lower_snap for k in turnstile_indicators) or any(
+            k in lower_url for k in ["challenges.cloudflare.com", "turnstile"]
+        )
+
+        # Active reCAPTCHA challenge (interactive checkbox "I'm not a robot", challenge iframe)
+        recaptcha_active_indicators = [
+            "i'm not a robot",
+            "nie jestem robotem",
+            "recaptcha challenge",
+            "select all images",
+            "wybierz wszystkie kwadraty",
+            "google.com/recaptcha/api2/bframe",
+            "google.com/recaptcha/api2/anchor",
+        ]
+        is_active_recaptcha = any(k in lower_snap for k in recaptcha_active_indicators)
+
+        # Active hCaptcha
+        hcaptcha_indicators = [
+            "hcaptcha.com",
+            "i am human",
+            "jestem człowiekiem",
+            "hcaptcha challenge",
+        ]
+        is_hcaptcha = any(k in lower_snap for k in hcaptcha_indicators)
+
+        # Candidate element scan for active challenge controls
+        matched_cand: Optional[Dict[str, Any]] = None
+        for c in candidates:
+            c_name = (c.get("name") or "").lower()
+            c_all = f"{c.get('role', '')} {c_name} {c.get('context', '')}".lower()
+
+            if any(k in c_name for k in ["i'm not a robot", "nie jestem robotem"]):
+                is_active_recaptcha = True
+                matched_cand = c
+                break
+            if any(k in c_all for k in ["turnstile", "verify you are human", "potwierdź, że jesteś człowiekiem"]):
+                is_turnstile = True
+                matched_cand = c
+                break
+            if any(k in c_all for k in ["i am human", "jestem człowiekiem"]):
+                is_hcaptcha = True
+                matched_cand = c
+                break
+
+        # Passive badge suppression: If passive badge is present without any active challenge indicators
+        if has_passive_badge and not (is_cf_interstitial or is_turnstile or is_active_recaptcha or is_hcaptcha):
+            latency_ms = (time.perf_counter() - t0) * 1000.0
+            return {
+                "is_captcha": False,
+                "captcha_type": "none",
+                "confidence": 0.08,
+                "heuristic_trigger": False,
+                "neural_score": 0.05,
+                "latency_ms": round(latency_ms, 2),
+                "matched_candidate": None,
+            }
+
+        heuristic_trigger = False
+        captcha_type = "none"
+
+        if is_cf_interstitial:
+            heuristic_trigger = True
+            captcha_type = "cloudflare_interstitial"
+        elif is_turnstile:
+            heuristic_trigger = True
+            captcha_type = "turnstile"
+        elif is_active_recaptcha:
+            heuristic_trigger = True
+            captcha_type = "recaptcha"
+        elif is_hcaptcha:
+            heuristic_trigger = True
+            captcha_type = "hcaptcha"
+
+        # 3. Neural scoring on security verification intent
+        intent = "security verification challenge cloudflare turnstile recaptcha hcaptcha verify human weryfikacja zabezpieczeń"
+        relevant_candidates: List[Dict[str, Any]] = []
+        for c in candidates:
+            c_text = f"{c.get('role', '')} {c.get('name', '')} {c.get('context', '')}".lower()
+            if any(k in c_text for k in ["turnstile", "captcha", "człowiek", "human", "security", "weryfikuj", "zabezpiecz", "cloudflare", "robot"]):
+                if not any(pb in c_text for pb in passive_badge_indicators):
+                    relevant_candidates.append(c)
+
+        neural_score = 0.0
+        best_cand = matched_cand
+        if evaluator is not None and (relevant_candidates or (not heuristic_trigger and candidates)):
+            eval_cands = relevant_candidates if relevant_candidates else candidates[:12]
+            eval_res = evaluator.evaluate_candidates(intent, eval_cands)
+            neural_score = float(eval_res.get("confidence", 0.0))
+            if not best_cand and eval_res.get("ranked_candidates"):
+                cand_candidate = eval_res["ranked_candidates"][0]
+                if cand_candidate.get("confidence_score", 0.0) >= 0.50:
+                    best_cand = cand_candidate
+
+        if heuristic_trigger:
+            confidence = max(0.92, neural_score)
+            is_captcha = True
+        elif neural_score >= 0.70 and not has_passive_badge:
+            confidence = neural_score
+            is_captcha = True
+            captcha_type = "recaptcha" if "recaptcha" in str(best_cand).lower() else "turnstile"
+        else:
+            confidence = min(0.35, neural_score)
+            is_captcha = False
+            captcha_type = "none"
+
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+        return {
+            "is_captcha": is_captcha,
+            "captcha_type": captcha_type,
+            "confidence": round(confidence, 4),
+            "heuristic_trigger": heuristic_trigger,
+            "neural_score": round(neural_score, 4),
+            "latency_ms": round(latency_ms, 2),
+            "matched_candidate": best_cand,
+        }
+
