@@ -262,8 +262,12 @@ async def setup_ssrf_route_guard(
                 await route.abort("blockedbyclient")
                 return
 
+        if not exempt_origins:
+            await route.continue_()
+            return
+
         try:
-            # Intercept redirect responses before Playwright/Chromium follows them
+            # Intercept redirect responses before Playwright/Chromium follows them (used when exempt_origins is set)
             response = await route.fetch(max_redirects=0)
             if response.status in (301, 302, 303, 307, 308):
                 location = response.headers.get("location")

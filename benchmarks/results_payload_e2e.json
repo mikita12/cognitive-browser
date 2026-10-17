@@ -1,0 +1,153 @@
+{
+  "timestamp": "2026-10-16 19:27:31",
+  "scenarios": {},
+  "system_cookies": {
+    "pracuj_pl_count": 24,
+    "sample": {
+      "name": "REDACTED",
+      "domain": ".pracuj.pl",
+      "sameSite": "None"
+    }
+  },
+  "neural_matching": {
+    "latency_ms": 56.25,
+    "fields_matched": 8,
+    "actions": [
+      {
+        "payload_key": "first_name",
+        "action": "fill",
+        "role": "textbox",
+        "name": "Imię",
+        "nth": 0,
+        "value": "Antoni",
+        "file_paths": null,
+        "confidence": 0.732
+      },
+      {
+        "payload_key": "last_name",
+        "action": "fill",
+        "role": "textbox",
+        "name": "Nazwisko",
+        "nth": 0,
+        "value": "Zieliński",
+        "file_paths": null,
+        "confidence": 0.4952
+      },
+      {
+        "payload_key": "email",
+        "action": "fill",
+        "role": "textbox",
+        "name": "Adres e-mail",
+        "nth": 0,
+        "value": "antoni.zielinski@example.com",
+        "file_paths": null,
+        "confidence": 0.7191
+      },
+      {
+        "payload_key": "phone",
+        "action": "fill",
+        "role": "textbox",
+        "name": "Numer telefonu",
+        "nth": 0,
+        "value": "+48 501 234 567",
+        "file_paths": null,
+        "confidence": 0.7128
+      },
+      {
+        "payload_key": "experience",
+        "action": "select",
+        "role": "combobox",
+        "name": "Poziom doświadczenia",
+        "nth": 0,
+        "value": "Senior",
+        "file_paths": null,
+        "confidence": 0.8278
+      },
+      {
+        "payload_key": "cv",
+        "action": "upload_file",
+        "role": "button",
+        "name": "Załącz dokument CV",
+        "nth": 0,
+        "value": null,
+        "file_paths": [
+          "/tmp/tmpwp6ovsif.pdf"
+        ],
+        "confidence": 1.0
+      },
+      {
+        "payload_key": "certificates",
+        "action": "upload_file",
+        "role": "button",
+        "name": "Dodaj certyfikaty (wiele plików)",
+        "nth": 0,
+        "value": null,
+        "file_paths": [
+          "/tmp/tmp8pr6ixq6.png",
+          "/tmp/tmpsab3p9ds.png"
+        ],
+        "confidence": 1.0
+      },
+      {
+        "payload_key": "rodo",
+        "action": "check",
+        "role": "checkbox",
+        "name": "Zgadzam się na przetwarzanie danych osobowych (RODO)",
+        "nth": 0,
+        "value": null,
+        "file_paths": null,
+        "confidence": 1.0
+      }
+    ]
+  },
+  "execution_log": [
+    {
+      "key": "first_name",
+      "action": "fill('Antoni')",
+      "latency_ms": 9.24
+    },
+    {
+      "key": "last_name",
+      "action": "fill('Zieliński')",
+      "latency_ms": 4.63
+    },
+    {
+      "key": "email",
+      "action": "fill('antoni.zielinski@example.com')",
+      "latency_ms": 6.49
+    },
+    {
+      "key": "phone",
+      "action": "fill('+48 501 234 567')",
+      "latency_ms": 4.44
+    },
+    {
+      "key": "experience",
+      "action": "select('Senior')",
+      "latency_ms": 16.56
+    },
+    {
+      "key": "cv",
+      "action": "upload_file('['/tmp/tmpwp6ovsif.pdf']')",
+      "latency_ms": 49.87
+    },
+    {
+      "key": "certificates",
+      "action": "upload_file('['/tmp/tmp8pr6ixq6.png', '/tmp/tmpsab3p9ds.png']')",
+      "latency_ms": 46.78
+    },
+    {
+      "key": "rodo",
+      "action": "check()",
+      "latency_ms": 29.57
+    }
+  ],
+  "status": "SUCCESS",
+  "dom_verification": {
+    "email_ok": true,
+    "cv_upload_ok": true,
+    "multi_file_upload_ok": true,
+    "rodo_ok": true,
+    "submission_ok": true
+  }
+}

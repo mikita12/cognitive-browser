@@ -86,7 +86,7 @@ git commit -m "feat(security): allow custom private network CIDR exemptions"
 ## Benchmarks & Testing Ethics
 
 - **Never invent or guess numbers**: If you contribute benchmark comparisons or latency claims, explain the exact measurement setup and token counting rules.
-- **Do not run aggressive benchmark loops on live third-party websites**: Use the offline fixture mode (`--use-fixtures`) in `benchmarks/run_15_cases_benchmark.py` whenever testing workflow logic.
+- **Do not run aggressive benchmark loops on live third-party websites**: Use local mock fixtures or unit tests whenever testing workflow logic.
 - **Respect robots.txt and website Terms of Service** during testing and development.
 
 ---

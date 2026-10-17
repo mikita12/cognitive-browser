@@ -49,3 +49,10 @@ RELEASE_NOTES_INTERNAL.md
 .env
 .env.local
 
+# Local development & review preview
+preview/
+.playwright-mcp/
+kod.txt
+*.png
+
+

@@ -26,17 +26,17 @@ Alternative GUI screen recorders:
 
 Choose one of two demonstration scenarios depending on whether you want a pure terminal view or a side-by-side browser view:
 
-### Option A: Terminal-Only Fixture Benchmark (Fast & Reproducible)
-Demonstrates the Reflex Core making local NLI routing decisions without network latency or external LLM tokens:
+### Option A: Test Suite Demonstration (Fast & Reproducible)
+Demonstrates the Reflex Core making local NLI routing decisions without network latency:
 
 ```bash
-python benchmarks/run_15_cases_benchmark.py --mode fixture --runs 1
+pytest tests/ -v
 ```
 
 ### Option B: Headful Browser Automation
-Shows a live browser window filling forms, dismissing cookie overlays, and completing multi-step tasks in real time:
+Shows a live browser window filling forms, dismissing cookie overlays, and completing tasks in real time:
 
-Edit `examples/wroclaw_pizza_hunter.py` or `benchmarks/run_15_cases_benchmark.py` to set `headless=False`:
+Edit `examples/wroclaw_pizza_hunter.py` to set `headless=False`:
 ```python
 browser = await p.chromium.launch(headless=False, slow_mo=100)
 ```
@@ -59,15 +59,12 @@ Set Padding 20
 Set Theme "Catppuccin Mocha"
 Set WindowBar Colorful
 
-Type "python benchmarks/run_15_cases_benchmark.py --mode fixture --runs 1"
+Type "pytest tests/ -v"
 Sleep 500ms
 Enter
 
-# Wait for Reflex Core initialization and case execution
-Sleep 8s
-
-# Show benchmark latency and token summary
-Type "python benchmarks/summarize_results.py"
+# Wait for test suite execution
+Sleep 5s
 Sleep 500ms
 Enter
 Sleep 4s
