@@ -8,7 +8,8 @@ from .cache import RouteCache
 from .captcha import CaptchaResolver
 from .config import get_capsolver_api_key, get_confidence_threshold, get_reflex_model
 from .cookies import extract_firefox_cookies, find_firefox_profiles, import_system_cookies
-from .reflex import AriaElementParser, ReflexCore
+from .parser import AriaElementParser
+from .reflex import ReflexCore
 from .security import (
     SecurityError,
     is_exempt_origin,
