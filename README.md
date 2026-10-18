@@ -28,6 +28,17 @@ For complete technical specifications, see the [Architecture & Engineering Guide
 
 ---
 
+## Tech Stack
+
+- **Language & Runtime:** Python 3.10+ (`asyncio`)
+- **Neural Routing & NLP:** PyTorch, HuggingFace `transformers` (`AutoModelForSequenceClassification`, `AutoTokenizer`), Jina / `/v1/rerank` REST API
+- **Browser Automation:** Playwright (`chromium` with custom stealth init scripts & ARIA Accessibility Tree snapshots)
+- **Protocols & Interfaces:** Model Context Protocol (`mcp` / `FastMCP`), FastAPI, Uvicorn, Pydantic
+- **Storage & Caching:** SQLite (`sqlite3` — `RouteCache` & optional Firefox cookie reader)
+- **Quality & CI/CD:** Pytest (`pytest-cov`, `anyio`), Ruff, Mypy, Docker, GitHub Actions
+
+---
+
 ## Supported Models
 
 `ReflexCore` automatically supports Cross-Encoder Rerankers (`num_labels=1`), NLI models (`num_labels=3`), and remote `/v1/rerank` APIs (0 MB local RAM/VRAM):
