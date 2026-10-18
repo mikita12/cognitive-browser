@@ -170,7 +170,7 @@ class BrowserOrchestrator:
                 if isinstance(cnt, int) and cnt > 0:
                     raw_aria = await loc.aria_snapshot()
                     if isinstance(raw_aria, str) and len(raw_aria.strip()) > 60:
-                        if ranked_chunks and len(raw_aria.splitlines()) > max_lines:
+                        if sel == "body" and ranked_chunks and len(raw_aria.splitlines()) > max_lines:
                             selected_indices = {0, 1}
                             for rc in ranked_chunks[:3]:
                                 selected_indices.add(int(rc["chunk_index"]))
@@ -433,10 +433,12 @@ class BrowserOrchestrator:
                         total_reflex_gpu_ms += float(sat_res.get("latency_ms", 0.0))
                         last_satisfaction_rate = float(sat_res.get("goal_satisfaction_rate", 0.0))
                         last_ranked_chunks = sat_res.get("ranked_chunks")
-                        if sat_res.get("is_satisfied"):
+                        if sat_res.get("is_satisfied") and not (extracted_query and not did_fill_search):
                             break
 
-                if ReflexCore.is_goal_satisfied_on_page(goal, snapshot_yaml, current_title, str(page.url)):
+                if not (extracted_query and not did_fill_search) and ReflexCore.is_goal_satisfied_on_page(
+                    goal, snapshot_yaml, current_title, str(page.url)
+                ):
                     last_satisfaction_rate = max(last_satisfaction_rate, 0.90)
                     break
 

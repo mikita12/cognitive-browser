@@ -153,23 +153,23 @@ class ReflexCore:
     def extract_fill_value(intent: str) -> Optional[str]:
         """Extracts a search query or input value from a natural language instruction if present."""
         intent_clean = intent.strip()
-        m_colon = re.search(
-            r"(?:wpisz|wprowadź|wyszukaj|szukaj|type|fill|enter|search)[^:]{0,35}:\s*(.+?)(?:\s+i\s+(?:kliknij|naciśnij|wciśnij|zatwierdź)|$)",
-            intent_clean,
-            re.I,
-        )
-        if m_colon:
-            val = m_colon.group(1).strip().strip("'\"")
-            if val:
-                return val
-
         m_quote = re.search(
-            r"(?:wpisz|wprowadź|type|fill|enter|wybierz|select|choose)\s+['\"„”]([^'\"„”]{2,80})['\"„”]",
+            r"(?:wpisz|wprowadź|wyszukaj|szukaj|type|fill|enter|search|wybierz|select|choose)[^'\"„”]{0,40}['\"„”]([^'\"„”]{2,80})['\"„”]",
             intent_clean,
             re.I,
         )
         if m_quote:
             return m_quote.group(1).strip()
+
+        m_colon = re.search(
+            r"(?:wpisz|wprowadź|wyszukaj|szukaj|type|fill|enter|search)[^:]{0,35}:\s*(.+?)(?:\s+i\s+(?:kliknij|naciśnij|wciśnij|zatwierdź|otwórz|przejdź|sprawdź)|,?\s+aby\s+|$)",
+            intent_clean,
+            re.I,
+        )
+        if m_colon:
+            val = m_colon.group(1).strip().strip("'\"„”")
+            if val:
+                return val
 
         return None
 
@@ -193,14 +193,17 @@ class ReflexCore:
             )
 
         wants_select = any(w in intent_lower for w in ("wybierz", "select", "choose", "z listy", "dropdown", "opcję"))
-        if el.role in ("combobox", "option") and (
-            wants_select or (fill_val and not any(w in intent_lower for w in ("wpisz", "type", "fill")))
+        is_search_control = el.role == "searchbox" or any(w in el.name.lower() for w in ("szukaj", "search", "wyszuk"))
+        if (
+            el.role in ("combobox", "option")
+            and not is_search_control
+            and (wants_select or (fill_val and not any(w in intent_lower for w in ("wpisz", "type", "fill"))))
         ):
             return ActionCommand(action="select", target=el, value=fill_val, confidence=confidence)
 
         if el.is_input and fill_val:
-            wants_submit = el.role == "searchbox" or any(
-                w in intent_lower for w in ("szukaj", "wyszukaj", "search", "enter", "zatwierdź")
+            wants_submit = is_search_control or any(
+                w in intent_lower for w in ("szukaj", "wyszuk", "search", "enter", "zatwierdź", "otwórz")
             )
             act: ActionType = "fill_and_submit" if wants_submit else "fill"
             return ActionCommand(action=act, target=el, value=fill_val, confidence=confidence)
@@ -300,7 +303,9 @@ class ReflexCore:
         clean_lines = [
             line
             for line in snapshot_yaml.splitlines()
-            if line.strip() and line.strip() not in ("- img", "- separator", "- img:", '- text: ""', "- group")
+            if line.strip()
+            and line.strip() not in ("- img", "- separator", "- img:", '- text: ""', "- group")
+            and not line.strip().startswith(("- searchbox", "- combobox", "- textbox"))
         ]
 
         if not clean_lines:
