@@ -20,18 +20,11 @@ Cognitive Browser enables AI coding assistants (Antigravity, Claude Desktop, Cur
 
 ## Architecture Overview
 
-```mermaid
-flowchart LR
-    Agent["AI Agent / LLM"] -->|cognitive_browse| MCP["FastMCP / FastAPI"]
-    MCP --> Orch["BrowserOrchestrator"]
-    Orch --> Reflex["ReflexCore (score_pairs)"]
-    Orch --> Payload["PayloadBinder"]
-    Orch --> Captcha["CaptchaResolver"]
-    Orch --> Cache["RouteCache (Self-Healing)"]
-    Orch --> Engine["BrowserEngine (Playwright Stealth)"]
-```
+<p align="center">
+  <img src="docs/architecture.svg" alt="Cognitive Browser System Architecture" width="100%" />
+</p>
 
-For complete technical specifications, see the [Architecture & Engineering Guide](docs/architecture.md).
+For complete technical specifications, see the [Architecture & Engineering Guide](docs/architecture.md) (compiled from [`docs/architecture.d2`](docs/architecture.d2) via [D2](https://d2lang.com/)).
 
 ---
 

@@ -1,0 +1,175 @@
+direction: down
+
+vars: {
+  d2-config: {
+    layout-engine: dagre
+    theme-id: 200
+    pad: 28
+  }
+}
+
+classes: {
+  layer: {
+    style: {
+      border-radius: 10
+      stroke-width: 2
+      font-size: 19
+      bold: true
+    }
+  }
+  module: {
+    style: {
+      border-radius: 8
+      stroke-width: 2
+      font-size: 16
+      shadow: true
+    }
+  }
+}
+
+clients: "1. AI Clients & Interfaces" {
+  class: layer
+  style.fill: "#161b22"
+  style.stroke: "#30363d"
+  style.font-color: "#e6edf3"
+
+  agent: "AI Coding Assistants\n(Antigravity / Claude / Cursor)" {
+    class: module
+    style.fill: "#1f2937"
+    style.stroke: "#58a6ff"
+    style.font-color: "#f0f6fc"
+  }
+
+  mcp: "FastMCP / FastAPI Server\ncognitive_browse | smart_action | get_aria_snapshot" {
+    class: module
+    style.fill: "#1f2937"
+    style.stroke: "#58a6ff"
+    style.font-color: "#f0f6fc"
+  }
+
+  agent -> mcp: "Single Tool Call\n(goal / steps / payload)" {
+    style.stroke: "#58a6ff"
+    style.stroke-width: 2
+    style.font-color: "#c9d1d9"
+  }
+}
+
+core: "2. Orchestration & Zero-Token Neural Core" {
+  class: layer
+  style.fill: "#161b22"
+  style.stroke: "#30363d"
+  style.font-color: "#e6edf3"
+
+  orchestrator: "BrowserOrchestrator\n• Autonomous Multi-Hop Loop (up to 5 hops)\n• State vs. Action Competition\n• Ambiguity & Escalation Braking" {
+    class: module
+    style.fill: "#1e293b"
+    style.stroke: "#a371f7"
+    style.font-color: "#f0f6fc"
+  }
+
+  reflex: "ReflexCore (score_pairs)\n• Cross-Encoder Rerankers (1 label)\n• NLI Entailment Models (3 labels)\n• Remote /v1/rerank API (Jina / TEI)" {
+    class: module
+    style.fill: "#271c3a"
+    style.stroke: "#d2a8ff"
+    style.font-color: "#f0f6fc"
+  }
+
+  payload: "PayloadBinder\n• Role-Partitioned Form Matching\n• Cross-Lingual Key Binding (PL ↔ EN)\n• Multi-File Upload Routing" {
+    class: module
+    style.fill: "#271c3a"
+    style.stroke: "#d2a8ff"
+    style.font-color: "#f0f6fc"
+  }
+
+  cache: "RouteCache (SQLite)\n• Deterministic Shortcut Jumps\n• Self-Healing Auto-Invalidation" {
+    class: module
+    style.fill: "#1c2d27"
+    style.stroke: "#3fb950"
+    style.font-color: "#f0f6fc"
+  }
+
+  parser: "AriaElementParser\n• Accessibility Tree YAML Parser\n• Context & Section Tagging (<main>)\n• 1,000+ Candidates Support" {
+    class: module
+    style.fill: "#1c2d27"
+    style.stroke: "#3fb950"
+    style.font-color: "#f0f6fc"
+  }
+
+  orchestrator <-> reflex: "Candidate & Chunk Scoring\n(2.6ms GPU / 14ms CPU / 0 LLM Tokens)" {
+    style.stroke: "#d2a8ff"
+    style.stroke-width: 2
+    style.font-color: "#c9d1d9"
+  }
+  orchestrator -> payload: "JSON Payload" {
+    style.stroke: "#d2a8ff"
+    style.font-color: "#c9d1d9"
+  }
+  payload -> reflex: "score_pairs()" {
+    style.stroke: "#d2a8ff"
+    style.stroke-dash: 3
+    style.font-color: "#c9d1d9"
+  }
+  orchestrator <-> cache: "Lookup / Invalidate" {
+    style.stroke: "#3fb950"
+    style.font-color: "#c9d1d9"
+  }
+  orchestrator <- parser: "CandidateElement[]" {
+    style.stroke: "#3fb950"
+    style.font-color: "#c9d1d9"
+  }
+}
+
+execution: "3. Stealth Browser & Security Layer" {
+  class: layer
+  style.fill: "#161b22"
+  style.stroke: "#30363d"
+  style.font-color: "#e6edf3"
+
+  engine: "BrowserEngine (Playwright Stealth)\n• ActionCommand Execution\n• Cookie Banner Auto-Dismiss\n• Opt-In Cookie Sync (--enable-cookies)" {
+    class: module
+    style.fill: "#2d2118"
+    style.stroke: "#f0883e"
+    style.font-color: "#f0f6fc"
+  }
+
+  security: "Security & SSRF Guard\n• Loopback & Private IP Block\n• Cloud Metadata (169.254.169.254) Block\n• DNS Rebinding & Redirect Guard" {
+    class: module
+    style.fill: "#341a1e"
+    style.stroke: "#f85149"
+    style.font-color: "#f0f6fc"
+  }
+
+  captcha: "CaptchaResolver\n• Active vs. Passive Heuristic\n• Turnstile & reCAPTCHA v2 Solver" {
+    class: module
+    style.fill: "#2d2118"
+    style.stroke: "#f0883e"
+    style.font-color: "#f0f6fc"
+  }
+
+  engine -> security: "Validate URL & Route Guard" {
+    style.stroke: "#f85149"
+    style.font-color: "#c9d1d9"
+  }
+  engine -> captcha: "Challenge Check" {
+    style.stroke: "#f0883e"
+    style.font-color: "#c9d1d9"
+  }
+}
+
+clients.mcp -> core.orchestrator: "Dispatch Workflow" {
+  style.stroke: "#58a6ff"
+  style.stroke-width: 2
+  style.font-color: "#c9d1d9"
+}
+
+core.orchestrator -> execution.engine: "ActionCommand\n(click / fill / select / upload)" {
+  style.stroke: "#f0883e"
+  style.stroke-width: 2
+  style.font-color: "#c9d1d9"
+}
+
+execution.engine -> core.parser: "ARIA Snapshot YAML" {
+  style.stroke: "#3fb950"
+  style.stroke-width: 2
+  style.font-color: "#c9d1d9"
+}
