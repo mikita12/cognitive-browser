@@ -12,13 +12,13 @@ services:
     environment:
       - DEVICE=cuda
       - PORT=8000
-      - MODEL_NAME=cross-encoder/nli-deberta-v3-small
+      - MODEL_NAME=cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
       - SESSION_DIR=/data/browser_sessions
       # Optional: uncomment to secure endpoints with bearer token authentication
       # - API_TOKEN=your-secret-token-here
     volumes:
       - ./data/browser_sessions:/data/browser_sessions
-      - /home/user/.cache/huggingface:/root/.cache/huggingface
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
     deploy:
       resources:
         reservations:

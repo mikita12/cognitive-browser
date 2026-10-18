@@ -66,57 +66,64 @@ flowchart TD
 
 ## 3. Core Modules & Responsibilities
 
-### 3.1 [`cognitive_browser.parser.AriaElementParser`](file://./cognitive_browser/parser.py)
-- **Role:** Extracts interactive candidate elements from Playwright ARIA snapshots.
+### 3.0 [`cognitive_browser.models`](../cognitive_browser/models.py)
+- **Role:** Strongly-typed domain contracts shared across all layers with dictionary-compatibility mixins for zero-friction JSON/MCP serialization.
+- **Key Contracts:**
+  - `CandidateElement`: Normalized interactive DOM node (`ref`, `role`, `name`, `context`, `section`, `nth`, `url`) with `format_for_model()`.
+  - `ActionCommand`: Unified command contract (`action`, `target`, `role`, `name`, `nth`, `value`, `files`, `confidence`, `source`).
+  - `PageState` & `StepResult`: Structured page snapshot and step telemetry records.
+
+### 3.1 [`cognitive_browser.parser.AriaElementParser`](../cognitive_browser/parser.py)
+- **Role:** Extracts interactive `CandidateElement` instances from Playwright ARIA snapshots.
 - **Key Capabilities:**
   - Fast regex-based parsing of ARIA tree YAML (`- role "name"`).
   - PUA icon character cleaning (`\ue000-\uf8ff`) to prevent token pollution.
   - Section context flags: distinguishes elements inside `<main>`, `<article>`, `<header>`, and `<footer>` (`is_main`, `is_footer`, `is_header`).
   - Scalability: Supports 1,000+ candidates without artificial cutoffs; handles large infinite-scroll pages seamlessly.
 
-### 3.2 [`cognitive_browser.payload.PayloadBinder`](file://./cognitive_browser/payload.py)
-- **Role:** Maps arbitrary structured JSON payload dictionaries to DOM elements using neural cross-encoding.
+### 3.2 [`cognitive_browser.payload.PayloadBinder`](../cognitive_browser/payload.py)
+- **Role:** Maps arbitrary structured JSON payload dictionaries to DOM elements using structural role partitioning and neural cross-encoding (`score_pairs()`).
 - **Key Capabilities:**
-  - Matches keys (e.g. `first_name`, `cv_file`, `job_type`) to candidate form fields (`textbox`, `combobox`, `file`, `checkbox`).
-  - Distinguishes file upload inputs (`file_paths`) from regular text inputs.
-  - Generates atomic action plans for automatic submission or field-by-field filling.
+  - Matches keys across languages (e.g. `first_name` -> `Imię`, `imie_i_nazwisko_klienta` -> `Customer name`) to candidate form fields (`textbox`, `combobox`, `checkbox`, `button`) without hardcoded synonym dictionaries.
+  - Distinguishes file upload inputs (`file_paths`) and boolean toggles from text/select inputs.
+  - Solves 1-to-1 greedy bipartite matching and orders resulting `ActionCommand` objects top-to-bottom by DOM index.
 
-### 3.3 [`cognitive_browser.captcha.CaptchaResolver`](file://./cognitive_browser/captcha.py)
+### 3.3 [`cognitive_browser.captcha.CaptchaResolver`](../cognitive_browser/captcha.py)
 - **Role:** Automated CAPTCHA detection and third-party solving (CapSolver).
 - **Key Capabilities:**
   - `evaluate_presence(...)`: Dual heuristic and semantic check. Differentiates passive legal footers ("Protected by reCAPTCHA") from active challenge screens.
   - Detects Cloudflare Turnstile `cf-turnstile` wrappers and reCAPTCHA v2 iframe tokens.
   - Integrates with CapSolver API asynchronously; falls back gracefully when API keys are absent.
 
-### 3.4 [`cognitive_browser.cache.RouteCache`](file://./cognitive_browser/cache.py)
-- **Role:** Persistent SQLite cache storing successful navigation decisions.
+### 3.4 [`cognitive_browser.cache.RouteCache`](../cognitive_browser/cache.py)
+- **Role:** Persistent SQLite cache storing successful navigation decisions with automatic self-healing (`invalidate()`).
 - **Key Capabilities:**
   - Indexed by `(page_url, instruction)` or `(page_url, "GOAL::" + goal)`.
   - Enables instant direct jumps to target URLs or interactive elements for routine queries, dropping latency to <15ms.
 
-### 3.5 [`cognitive_browser.reflex.ReflexCore`](file://./cognitive_browser/reflex.py)
-- **Role:** High-speed semantic decision core powered by local HuggingFace Cross-Encoder models (`modernbert-embed-base` or `deberta-v3-small`).
+### 3.5 [`cognitive_browser.reflex.ReflexCore`](../cognitive_browser/reflex.py)
+- **Role:** High-speed semantic decision core powered by local HuggingFace Cross-Encoder models (`mmarco-mMiniLMv2-L12-H384-v1` or `nli-deberta-v3-small`).
 - **Key Capabilities:**
-  - Mini-batched GPU inference across candidate pools.
+  - Single centralized GPU mini-batch inference method (`score_pairs()`) with length-sorted batching.
   - Page goal satisfaction scoring: breaks long page text into sliding semantic chunks and scores content match.
   - State vs Action Competition: If page satisfaction rate exceeds action candidate confidence, the agent stops navigating and extracts the content immediately.
   - Calibration: Calibrated confidence threshold (0.35 - 0.55) to trigger Agent-in-the-Loop escalation when ambiguous.
 
-### 3.6 [`cognitive_browser.orchestrator.BrowserOrchestrator`](file://./cognitive_browser/orchestrator.py)
-- **Role:** Unified state machine and loop coordinator.
+### 3.6 [`cognitive_browser.orchestrator.BrowserOrchestrator`](../cognitive_browser/orchestrator.py)
+- **Role:** Unified state machine and concurrency-safe loop coordinator (`asyncio.Lock`).
 - **Key Capabilities:**
   - Consolidates multi-hop autonomous exploration (`browse(goal=...)`), planned step execution (`browse(steps=[...])`), and universal parameter binding (`browse(payload=...)`).
-  - Manages cookie context synchronization, overlay auto-dismissal, CAPTCHA resolution, RouteCache updates, and clean ARIA content extraction.
+  - Manages cookie context synchronization, overlay auto-dismissal, CAPTCHA resolution, RouteCache self-healing, and deep-chunk ARIA content extraction.
   - Decouples server interfaces (FastMCP, FastAPI) from browser automation internals.
 
-### 3.7 [`cognitive_browser.browser.BrowserEngine`](file://./cognitive_browser/browser.py)
-- **Role:** Low-level Playwright automation wrapper.
+### 3.7 [`cognitive_browser.browser.BrowserEngine`](../cognitive_browser/browser.py)
+- **Role:** Pure Playwright execution driver decoupled from neural inference.
 - **Key Capabilities:**
-  - Stealth flags (`navigator.webdriver` spoofing, randomized viewport sizes).
-  - Overlay auto-dismissal for standard cookie banners and privacy dialogs.
-  - Direct execution of clicks, text typing, combobox selection, checkbox toggling, and file uploads.
+  - Stealth flags (`navigator.webdriver` spoofing, realistic client hints).
+  - Deterministic overlay auto-dismissal for standard cookie banners and privacy dialogs.
+  - Unified `execute(page, command: ActionCommand)` entrypoint for clicks, text typing, combobox selection, checkbox toggling, and file uploads.
 
-### 3.8 [`cognitive_browser.security`](file://./cognitive_browser/security.py) & [`cookies.py`](file://./cognitive_browser/cookies.py)
+### 3.8 [`cognitive_browser.security`](../cognitive_browser/security.py) & [`cookies.py`](../cognitive_browser/cookies.py)
 - **Security:** Strict URL validation, DNS rebinding mitigation, loopback/cloud-metadata blocking, and sensitive data masking in telemetry.
 - **Cookies:** Reads local Firefox SQLite databases or exported JSON cookie jars to import authenticated sessions directly into browser context.
 

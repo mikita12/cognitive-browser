@@ -117,7 +117,7 @@ def generate_action_plan_instances(rng: random.Random, count: int = 200) -> List
         "Karta graficzna Radeon RX 7800 XT",
     ]
 
-    emails = ["Kowalskim@gmail.com", "anna.kowalska@example.com", "jan.nowak@tech.io", "developer@cloud.pl"]
+    emails = ["piotr.wisniewski@example.com", "anna.kowalska@example.com", "jan.nowak@tech.io", "developer@cloud.pl"]
     names = ["Michał", "Anna", "Piotr", "Katarzyna", "Tomasz"]
     cities = ["Warszawa", "Kraków", "Wrocław", "Gdańsk", "Poznań"]
 
