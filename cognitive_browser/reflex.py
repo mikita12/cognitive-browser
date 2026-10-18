@@ -153,13 +153,13 @@ class ReflexCore:
     def extract_fill_value(intent: str) -> Optional[str]:
         """Extracts a search query or input value from a natural language instruction if present."""
         intent_clean = intent.strip()
-        m_quote = re.search(
-            r"(?:wpisz|wprowadź|wyszukaj|szukaj|type|fill|enter|search|wybierz|select|choose)[^'\"„”]{0,40}['\"„”]([^'\"„”]{2,80})['\"„”]",
+        m_colon_quoted = re.search(
+            r"(?:wpisz|wprowadź|wyszukaj|szukaj|type|fill|enter|search)[^:]{0,35}:\s*['\"„”]([^'\"„”]{2,80})['\"„”]",
             intent_clean,
             re.I,
         )
-        if m_quote:
-            return m_quote.group(1).strip()
+        if m_colon_quoted:
+            return m_colon_quoted.group(1).strip()
 
         m_colon = re.search(
             r"(?:wpisz|wprowadź|wyszukaj|szukaj|type|fill|enter|search)[^:]{0,35}:\s*(.+?)(?:\s+i\s+(?:kliknij|naciśnij|wciśnij|zatwierdź|otwórz|przejdź|sprawdź)|,?\s+aby\s+|$)",
@@ -170,6 +170,14 @@ class ReflexCore:
             val = m_colon.group(1).strip().strip("'\"„”")
             if val:
                 return val
+
+        m_quote = re.search(
+            r"(?:wpisz|wprowadź|type|fill|enter|wybierz|select|choose)\s+['\"„”]([^'\"„”]{2,80})['\"„”]",
+            intent_clean,
+            re.I,
+        )
+        if m_quote:
+            return m_quote.group(1).strip()
 
         return None
 
