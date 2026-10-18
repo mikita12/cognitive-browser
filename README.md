@@ -13,7 +13,7 @@ Cognitive Browser enables AI coding assistants (Antigravity, Claude Desktop, Cur
 - 🧠 **Dictionary-Free Cross-Lingual `PayloadBinder`:** Partitions DOM controls by structural role (`textbox`, `combobox`, `checkbox`, `upload_file`) and binds arbitrary JSON payloads across languages (e.g., English keys to Polish forms or vice versa) with zero hardcoded synonym tables.
 - 🚀 **Self-Healing `RouteCache`:** Learns deterministic shortcut routes in SQLite for near-instant repeat execution and automatically invalidates stale entries if a site's DOM changes.
 - 🛡️ **SSRF & Security Guards:** Restricts navigation to public destinations, blocks loopback/private networks and cloud metadata APIs (`169.254.169.254`), and protects against DNS rebinding.
-- 🍪 **System Cookie Sync & CAPTCHA Resolution:** Imports authenticated sessions from local Firefox profiles and integrates automated Turnstile / reCAPTCHA resolution.
+- 🍪 **Opt-In Cookie Sync & CAPTCHA Resolution:** Can import authenticated sessions from local Firefox profiles (disabled by default; enabled via `--enable-cookies` flag) and integrates automated Turnstile / reCAPTCHA resolution.
 - 🧩 **Strongly-Typed Clean Architecture:** Built with decoupled single-responsibility modules (`models`, `parser`, `payload`, `captcha`, `cache`, `reflex`, `orchestrator`, `browser`, `security`).
 
 ---
@@ -80,7 +80,7 @@ playwright install chromium
 
 ### 2. Configure MCP Server
 
-Add to `~/.gemini/antigravity/mcp_config.json` or `claude_desktop_config.json` (add `"env"` only if overriding the default model or using Jina API):
+Add to `~/.gemini/antigravity/mcp_config.json` or `claude_desktop_config.json` (pass `"--enable-cookies"` in `"args"` only if you want to allow importing local browser cookies):
 
 ```json
 {

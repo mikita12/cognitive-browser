@@ -488,8 +488,12 @@ class BrowserEngine:
         browser_type: str = "firefox",
         profile_path: Optional[str] = None,
     ) -> int:
-        """Imports cookies from system browsers (Firefox, Chrome) or cookie files into the active session."""
+        """Imports cookies from system browsers (Firefox, Chrome) or cookie files (only when enabled via --enable-cookies)."""
+        from .config import is_cookie_extraction_enabled
         from .cookies import import_system_cookies
+
+        if not is_cookie_extraction_enabled():
+            return 0
 
         return await import_system_cookies(
             page.context, domain=domain, browser_type=browser_type, profile_path=profile_path

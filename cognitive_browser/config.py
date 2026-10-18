@@ -49,19 +49,25 @@ def get_ollama_model() -> str:
     return os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
 
 
+_CLI_COOKIES_ENABLED: bool = False
+
+
+def set_cookies_enabled(enabled: bool = True) -> None:
+    """Enables or disables system cookie extraction (activated via --enable-cookies CLI flag)."""
+    global _CLI_COOKIES_ENABLED
+    _CLI_COOKIES_ENABLED = enabled
+
+
+def is_cookie_extraction_enabled() -> bool:
+    """Returns True ONLY if the server was started with --enable-cookies or COGNITIVE_BROWSER_ENABLE_COOKIES=1."""
+    if _CLI_COOKIES_ENABLED:
+        return True
+    env_val = (
+        (os.getenv("COGNITIVE_BROWSER_ENABLE_COOKIES") or os.getenv("ENABLE_COOKIE_EXTRACTION") or "").strip().lower()
+    )
+    return env_val in ("1", "true", "yes", "on")
+
+
 def get_capsolver_api_key() -> str:
-    """Returns CapSolver API key from env or app .env."""
-    key = os.getenv("CAPSOLVER_API_KEY", "")
-    if key:
-        return key
-    app_env = os.path.expanduser("~/.app/.env")
-    if os.path.exists(app_env):
-        try:
-            with open(app_env, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith("CAPSOLVER_API_KEY="):
-                        return line.split("=", 1)[1].strip().strip('"').strip("'")
-        except Exception:
-            pass
-    return ""
+    """Returns CapSolver API key from environment."""
+    return os.getenv("CAPSOLVER_API_KEY", "").strip()

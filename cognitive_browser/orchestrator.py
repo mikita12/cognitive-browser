@@ -302,12 +302,15 @@ class BrowserOrchestrator:
         if url:
             validated_url = validate_url(url)
             if browser_context and browser_context != "ephemeral":
-                parsed = urllib.parse.urlparse(validated_url)
-                target_domain = parsed.hostname or validated_url
-                if hasattr(self.engine, "import_cookies_for_domain"):
-                    await self.engine.import_cookies_for_domain(
-                        page, domain=target_domain, browser_type=browser_context
-                    )
+                from .config import is_cookie_extraction_enabled
+
+                if is_cookie_extraction_enabled():
+                    parsed = urllib.parse.urlparse(validated_url)
+                    target_domain = parsed.hostname or validated_url
+                    if hasattr(self.engine, "import_cookies_for_domain"):
+                        await self.engine.import_cookies_for_domain(
+                            page, domain=target_domain, browser_type=browser_context
+                        )
 
             if str(page.url).rstrip("/") != validated_url.rstrip("/"):
                 try:

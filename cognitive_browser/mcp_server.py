@@ -113,7 +113,7 @@ async def cognitive_browse(
         goal: High-level natural language goal for autonomous multi-hop navigation on GPU (include relevant keywords/synonyms).
         steps: Optional explicit list of action steps with 'instruction' (and optional 'fill_value' / 'action').
         payload: Optional dictionary of form field values, filters, or file paths (str or List[str]) to bind and fill.
-        browser_context: Browser context mode: 'ephemeral' (default clean session), 'firefox' or 'system' (import real authenticated cookies to bypass Cloudflare), or path to cookies sqlite/json.
+        browser_context: Browser context mode: 'ephemeral' (default clean session). Passing 'firefox', 'system', or a cookie file path only works if the MCP server was started with the '--enable-cookies' flag.
     """
     global _last_candidates
     orchestrator = get_orchestrator()
@@ -190,7 +190,25 @@ async def get_aria_snapshot(
     return res
 
 
-def main():
+def main(argv: Optional[List[str]] = None) -> None:
+    import argparse
+    import sys
+
+    from .config import set_cookies_enabled
+
+    parser = argparse.ArgumentParser(description="Cognitive Browser MCP Server", add_help=False)
+    parser.add_argument(
+        "--enable-cookies",
+        "--cookies",
+        action="store_true",
+        dest="enable_cookies",
+        help="Allow importing local browser/system cookies when browser_context is specified.",
+    )
+    args, remaining = parser.parse_known_args(argv)
+    if args.enable_cookies:
+        set_cookies_enabled(True)
+    if argv is None:
+        sys.argv = [sys.argv[0], *remaining]
     mcp.run()
 
 

@@ -123,3 +123,38 @@ async def test_get_aria_snapshot_returns_semantic_tree():
         assert "aria_tree" in res
         assert "How to Register a Company" in res["aria_tree"]
         assert "Fill CEIDG-1 online" in res["aria_tree"]
+
+
+@pytest.mark.anyio
+async def test_cookies_disabled_by_default_unless_flag_passed():
+    """Verify that browser cookies are NOT imported by default unless --enable-cookies is active."""
+    from cognitive_browser.config import is_cookie_extraction_enabled, set_cookies_enabled
+
+    set_cookies_enabled(False)
+    assert is_cookie_extraction_enabled() is False
+
+    mock_reflex = MagicMock()
+    mock_engine = MagicMock()
+    mock_page = AsyncMock()
+    mock_page.url = "https://example.com"
+    mock_page.title.return_value = "Example"
+    mock_page.aria_snapshot.return_value = '- heading "Example"'
+    mock_engine.get_page = AsyncMock(return_value=mock_page)
+    mock_engine.import_cookies_for_domain = AsyncMock(return_value=1)
+    mock_engine.auto_dismiss_overlays = AsyncMock(return_value=False)
+
+    with patch("cognitive_browser.mcp_server.get_services", return_value=(mock_reflex, mock_engine)):
+        # 1. Default (no --enable-cookies flag): browser_context="firefox" must be ignored
+        await cognitive_browse(url="https://example.com", browser_context="firefox")
+        mock_engine.import_cookies_for_domain.assert_not_awaited()
+
+        # 2. When --enable-cookies flag is enabled: browser_context="firefox" imports cookies
+        try:
+            set_cookies_enabled(True)
+            assert is_cookie_extraction_enabled() is True
+            await cognitive_browse(url="https://example.com", browser_context="firefox")
+            mock_engine.import_cookies_for_domain.assert_awaited_once_with(
+                mock_page, domain="example.com", browser_type="firefox"
+            )
+        finally:
+            set_cookies_enabled(False)
