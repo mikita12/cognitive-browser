@@ -20,8 +20,23 @@ def get_confidence_threshold(default: float = 0.50) -> float:
 
 
 def get_reflex_model(default: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1") -> str:
-    """Returns the model identifier for Reflex Core (Multilingual Reranker / ModernBERT / DeBERTa)."""
+    """Returns the model identifier for Reflex Core (Multilingual Reranker / ModernBERT / DeBERTa / Jina)."""
     return os.getenv("COGNITIVE_BROWSER_MODEL", default)
+
+
+def get_rerank_api_url() -> str:
+    """Returns the remote Reranker API endpoint (defaults to Jina AI /v1/rerank if JINA_API_KEY is set)."""
+    url = os.getenv("RERANK_API_URL", "").strip()
+    if url:
+        return url
+    if os.getenv("JINA_API_KEY", "").strip():
+        return "https://api.jina.ai/v1/rerank"
+    return ""
+
+
+def get_rerank_api_key() -> str:
+    """Returns the API key for remote Reranker API (RERANK_API_KEY or JINA_API_KEY)."""
+    return (os.getenv("RERANK_API_KEY") or os.getenv("JINA_API_KEY") or "").strip()
 
 
 def get_ollama_url() -> str:

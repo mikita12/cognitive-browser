@@ -78,3 +78,71 @@ def test_adversarial_impossible_intent_suppression():
     assert res["confidence"] < 0.50
     assert res["should_escalate"] is True
     assert res["target_ref"] == "NONE"
+
+
+def test_remote_reranker_api_mode_zero_vram(monkeypatch):
+    """
+    Verifies that ReflexCore in remote API mode (e.g. Jina Reranker API / Cohere / TEI)
+    initializes with 0 local model weights (self.model is None) and properly scores
+    candidate elements and multi-query payload batches via /v1/rerank JSON responses.
+    """
+    import io
+    import json
+    import urllib.request
+
+    def fake_urlopen(req, timeout=15.0):
+        body = json.loads(req.data.decode("utf-8"))
+        query = body["query"].lower()
+        docs = body["documents"]
+        results = []
+        for idx, doc in enumerate(docs):
+            doc_lower = doc.lower()
+            score = 0.08
+            if "szukaj" in query and "szukaj" in doc_lower:
+                score = 0.94
+            elif "email" in query and "e-mail" in doc_lower:
+                score = 0.91
+            elif "telefon" in query and "telefon" in doc_lower:
+                score = 0.89
+            results.append({"index": idx, "relevance_score": score})
+
+        resp_bytes = json.dumps({"results": results}).encode("utf-8")
+        mock_resp = io.BytesIO(resp_bytes)
+        mock_resp.__enter__ = lambda s: s  # type: ignore[attr-defined]
+        mock_resp.__exit__ = lambda s, *args: None  # type: ignore[attr-defined]
+        return mock_resp
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    reflex = ReflexCore(
+        model_name="api:jina-reranker-v2-base-multilingual",
+        device="api",
+        api_url="https://api.jina.ai/v1/rerank",
+        api_key="jina_test_key",
+    )
+
+    assert reflex.use_api is True
+    assert reflex.model is None
+    assert reflex.tokenizer is None
+    assert reflex.is_reranker is True
+
+    candidates = [
+        {"role": "link", "name": "Kontakt", "context": "Stopka", "ref": "aria-1"},
+        {"role": "searchbox", "name": "Szukaj w serwisie...", "context": "Nagłówek", "ref": "aria-2"},
+        {"role": "textbox", "name": "Adres e-mail", "context": "Formularz", "ref": "aria-3"},
+        {"role": "textbox", "name": "Numer telefonu", "context": "Formularz", "ref": "aria-4"},
+    ]
+
+    res = reflex.evaluate_candidates("Wpisz w wyszukiwarkę: Szukaj AI", candidates)
+    assert res["target_ref"] == "aria-2"
+    assert res["confidence"] > 0.85
+    assert res["should_escalate"] is False
+
+    bound = reflex.bind_payload_to_elements(
+        {"adres_email": "jan@example.com", "numer_telefonu": "500600700"},
+        candidates,
+    )
+    assert len(bound) == 2
+    by_key = {item["payload_key"]: item["name"] for item in bound}
+    assert by_key["adres_email"] == "Adres e-mail"
+    assert by_key["numer_telefonu"] == "Numer telefonu"

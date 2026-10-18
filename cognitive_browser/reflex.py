@@ -4,16 +4,18 @@ Centralizes GPU mini-batch inference in `score_pairs()` and maps natural languag
 to standardized `ActionCommand` contracts with 0 LLM tokens.
 """
 
+import json
 import re
 import sys
 import time
+import urllib.request
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from .captcha import CaptchaResolver
-from .config import get_confidence_threshold, get_reflex_model
+from .config import get_confidence_threshold, get_reflex_model, get_rerank_api_key, get_rerank_api_url
 from .models import ActionCommand, ActionType, CandidateElement
 from .parser import AriaElementParser as AriaElementParser
 from .payload import PayloadBinder, _lexical_overlap_score
@@ -22,7 +24,7 @@ from .payload import PayloadBinder, _lexical_overlap_score
 class ReflexCore:
     """
     Discriminative Decision Engine & Autonomous Action Planner.
-    1. `score_pairs()`: Single centralized PyTorch GPU mini-batch inference method.
+    1. `score_pairs()`: Single centralized GPU/CPU/API mini-batch inference method.
     2. `evaluate_candidates()`: Ranks CandidateElements against an instruction and produces an ActionCommand.
     3. `evaluate_page_satisfaction()`: Evaluates page text chunks against an informational goal.
     """
@@ -40,10 +42,39 @@ class ReflexCore:
         "przejdź do stopki",
     )
 
-    def __init__(self, model_name: Optional[str] = None, device: Optional[str] = None):
+    def __init__(
+        self,
+        model_name: Optional[str] = None,
+        device: Optional[str] = None,
+        api_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ):
         if model_name is None:
             model_name = get_reflex_model()
         self.model_name = model_name
+        self.api_url = api_url if api_url is not None else get_rerank_api_url()
+        self.api_key = api_key if api_key is not None else get_rerank_api_key()
+        self.use_api = False
+        self.model: Any = None
+        self.tokenizer: Any = None
+
+        if device == "api" or model_name.startswith("api:") or bool(self.api_url):
+            self.device = "api"
+            self.use_api = True
+            self.is_reranker = True
+            if not self.api_url:
+                self.api_url = "https://api.jina.ai/v1/rerank"
+            clean_name = model_name[4:] if model_name.startswith("api:") else model_name
+            self.api_model = (
+                clean_name
+                if ("jina" in clean_name.lower() or "rerank" in clean_name.lower())
+                else "jina-reranker-v2-base-multilingual"
+            )
+            print(
+                f"[ReflexCore] Using remote Reranker API '{self.api_url}' (model='{self.api_model}', 0 MB local VRAM/RAM)...",
+                file=sys.stderr,
+            )
+            return
 
         if device is None:
             if torch.cuda.is_available():
@@ -75,14 +106,57 @@ class ReflexCore:
     def _warmup(self) -> None:
         self.score_pairs([["Submit form", "Web element: button 'Submit'"]])
 
+    def _score_pairs_api(self, pairs: List[List[str]]) -> List[float]:
+        """Scores (query, document) pairs via remote Reranker API (Jina AI / Cohere / TEI / vLLM)."""
+        probs_ordered = [0.0] * len(pairs)
+        by_query: Dict[str, List[tuple[int, str]]] = {}
+        for idx, (q, doc) in enumerate(pairs):
+            by_query.setdefault(q, []).append((idx, doc))
+
+        headers: Dict[str, str] = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "CognitiveBrowser/0.2",
+        }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        for query, indexed_docs in by_query.items():
+            docs = [d for _, d in indexed_docs]
+            payload = {
+                "model": self.api_model,
+                "query": query,
+                "documents": docs,
+                "top_n": len(docs),
+            }
+            req = urllib.request.Request(
+                self.api_url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+                for item in body.get("results", []):
+                    doc_idx = int(item.get("index", 0))
+                    score = float(item.get("relevance_score", 0.0))
+                    if 0 <= doc_idx < len(indexed_docs):
+                        orig_idx = indexed_docs[doc_idx][0]
+                        probs_ordered[orig_idx] = max(0.0, min(1.0, score))
+
+        return probs_ordered
+
     def score_pairs(self, pairs: List[List[str]], batch_size: int = 64) -> List[float]:
         """
-        Single centralized GPU inference method.
+        Single centralized inference method (GPU / CPU / Remote Reranker API).
         Takes a list of [text_a, text_b] pairs, sorts by length to minimize padding overhead,
         evaluates in mini-batches, and returns calibrated probabilities in [0.0, 1.0].
         """
         if not pairs:
             return []
+
+        if self.device == "api":
+            return self._score_pairs_api(pairs)
 
         indexed_pairs = list(enumerate(pairs))
         indexed_pairs.sort(key=lambda x: len(x[1][0]) + len(x[1][1]))
