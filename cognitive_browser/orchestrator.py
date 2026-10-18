@@ -37,6 +37,7 @@ class BrowserOrchestrator:
         self.reflex = reflex
         self.route_cache = route_cache or getattr(engine, "route_cache", None)
         self.last_candidates: List[Dict[str, Any]] = []
+        self._lock = asyncio.Lock()
 
     @staticmethod
     def compact_candidates(candidates: Sequence[Union[CandidateElement, Dict[str, Any]]]) -> List[Dict[str, Any]]:
@@ -159,7 +160,7 @@ class BrowserOrchestrator:
         Combines summary with top-scoring deep chunks if ranked_chunks are available.
         """
         try:
-            for sel in ("main article", "article", "main", "body"):
+            for sel in ("main", "article", "body"):
                 raw_loc = page.locator(sel)
                 if asyncio.iscoroutine(raw_loc):
                     raw_loc = await raw_loc
@@ -170,19 +171,18 @@ class BrowserOrchestrator:
                 if isinstance(cnt, int) and cnt > 0:
                     raw_aria = await loc.aria_snapshot()
                     if isinstance(raw_aria, str) and len(raw_aria.strip()) > 60:
-                        if sel == "body" and ranked_chunks and len(raw_aria.splitlines()) > max_lines:
-                            selected_indices = {0, 1}
-                            for rc in ranked_chunks[:3]:
-                                selected_indices.add(int(rc["chunk_index"]))
-                            ordered_chunks = sorted(
-                                [c for c in ranked_chunks if int(c["chunk_index"]) in selected_indices],
-                                key=lambda x: int(x["chunk_index"]),
-                            )
-                            combined_lines: List[str] = []
-                            for ch in ordered_chunks:
+                        raw_lines = raw_aria.splitlines()
+                        if ranked_chunks and len(raw_lines) > max_lines:
+                            head_lines = raw_lines[: max_lines // 2]
+                            deep_chunks = [c for c in ranked_chunks[:3] if int(c.get("chunk_index", 0)) >= 2]
+                            deep_chunks.sort(key=lambda x: int(x.get("chunk_index", 0)))
+                            combined_lines: List[str] = list(head_lines)
+                            for ch in deep_chunks:
                                 combined_lines.extend(ch.get("lines", []))
-                            return self.clean_aria_lines("\n".join(combined_lines), max_lines=max_lines)
-                        return self.clean_aria_lines(raw_aria, max_lines=max_lines)
+                            return self.clean_aria_lines(
+                                "\n".join(combined_lines), max_lines=max_lines, max_chars=max(5800, max_lines * 45)
+                            )
+                        return self.clean_aria_lines(raw_aria, max_lines=max_lines, max_chars=max(5800, max_lines * 45))
         except Exception:
             pass
         return ""
@@ -267,6 +267,28 @@ class BrowserOrchestrator:
         browser_context: Optional[str] = "ephemeral",
         timeout_ms: int = 20000,
     ) -> Dict[str, Any]:
+        async with self._lock:
+            return await self._browse_unlocked(
+                page,
+                url=url,
+                goal=goal,
+                steps=steps,
+                payload=payload,
+                browser_context=browser_context,
+                timeout_ms=timeout_ms,
+            )
+
+    async def _browse_unlocked(
+        self,
+        page: Any,
+        *,
+        url: Optional[str] = None,
+        goal: Optional[str] = None,
+        steps: Optional[List[Dict[str, Any]]] = None,
+        payload: Optional[Dict[str, Any]] = None,
+        browser_context: Optional[str] = "ephemeral",
+        timeout_ms: int = 20000,
+    ) -> Dict[str, Any]:
         """
         Unified multi-hop execution flow supporting:
         - Mode A: Autonomous Goal Navigation on GPU (0 LLM tokens)
@@ -305,7 +327,7 @@ class BrowserOrchestrator:
         payload_steps_log: List[Dict[str, Any]] = []
         if payload:
             snapshot_yaml = await page.aria_snapshot()
-            all_cands = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=150)
+            all_cands = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=400)
             self.last_candidates = all_cands
             if hasattr(self.reflex, "bind_payload_to_elements"):
                 bound_actions = self.reflex.bind_payload_to_elements(payload=payload, candidates=all_cands)
@@ -442,7 +464,7 @@ class BrowserOrchestrator:
                     last_satisfaction_rate = max(last_satisfaction_rate, 0.90)
                     break
 
-                all_cands = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=150)
+                all_cands = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=400)
                 self.last_candidates = all_cands
 
                 avail = [
@@ -655,7 +677,7 @@ class BrowserOrchestrator:
             snapshot_yaml, _ = await self._check_and_resolve_captcha(page, snapshot_yaml, await page.title())
 
             candidates = AriaElementParser.parse_snapshot(
-                snapshot_yaml, max_candidates=150, require_input_only=bool(fill_val)
+                snapshot_yaml, max_candidates=400, require_input_only=bool(fill_val)
             )
             self.last_candidates = candidates
 
@@ -891,6 +913,26 @@ class BrowserOrchestrator:
         max_tree_lines: int = 120,
     ) -> Dict[str, Any]:
         """Captures page ARIA state with semantic filtering."""
+        async with self._lock:
+            return await self._get_aria_snapshot_unlocked(
+                page,
+                url=url,
+                max_candidates=max_candidates,
+                selector=selector,
+                include_aria_tree=include_aria_tree,
+                max_tree_lines=max_tree_lines,
+            )
+
+    async def _get_aria_snapshot_unlocked(
+        self,
+        page: Any,
+        *,
+        url: Optional[str] = None,
+        max_candidates: int = 80,
+        selector: str = "body",
+        include_aria_tree: bool = True,
+        max_tree_lines: int = 120,
+    ) -> Dict[str, Any]:
         t_start = time.perf_counter()
         if url:
             valid_url = validate_url(url)
@@ -924,7 +966,8 @@ class BrowserOrchestrator:
             "execution_seconds": round(time.perf_counter() - t_start, 2),
         }
         if include_aria_tree:
+            eff_lines = min(max(int(max_tree_lines or 120), 20), 600)
             result["aria_tree"] = self.clean_aria_lines(
-                snapshot_yaml, max_lines=min(max_tree_lines, 140), max_chars=5200
+                snapshot_yaml, max_lines=eff_lines, max_chars=max(5200, eff_lines * 45)
             )
         return result
