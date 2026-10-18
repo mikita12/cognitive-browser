@@ -21,7 +21,7 @@ from .browser import BrowserEngine
 from .config import get_reflex_model
 from .orchestrator import BrowserOrchestrator
 from .reflex import AriaElementParser, ReflexCore
-from .security import SecurityError, mask_sensitive_value, setup_ssrf_route_guard, validate_url
+from .security import SecurityError, setup_ssrf_route_guard, validate_url
 
 # Environment configuration
 MODEL_NAME = get_reflex_model()
@@ -282,11 +282,7 @@ async def execute_browse_task(req: BrowseTaskRequest):
     await setup_ssrf_route_guard(page.context)
 
     try:
-        dict_steps = (
-            [s.model_dump() if hasattr(s, "model_dump") else dict(s) for s in req.steps]
-            if req.steps
-            else None
-        )
+        dict_steps = [s.model_dump() if hasattr(s, "model_dump") else dict(s) for s in req.steps] if req.steps else None
         orchestrator = BrowserOrchestrator(engine=engine_instance, reflex=router_instance)
         res = await orchestrator.browse(
             page,

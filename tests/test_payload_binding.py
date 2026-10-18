@@ -36,7 +36,13 @@ class TestPayloadBinding:
             {"ref": "aria-3", "role": "textbox", "name": "Numer telefonu", "context": "Kontakt", "nth": 0},
             {"ref": "aria-4", "role": "button", "name": "Załącz CV (PDF, DOCX)", "context": "Dokumenty", "nth": 0},
             {"ref": "aria-5", "role": "button", "name": "Załącz list motywacyjny", "context": "Dokumenty", "nth": 0},
-            {"ref": "aria-6", "role": "checkbox", "name": "Akceptuję regulamin i politykę prywatności", "context": "Zgody", "nth": 0},
+            {
+                "ref": "aria-6",
+                "role": "checkbox",
+                "name": "Akceptuję regulamin i politykę prywatności",
+                "context": "Zgody",
+                "nth": 0,
+            },
         ]
 
         payload = {
@@ -145,6 +151,47 @@ class TestPayloadBinding:
         assert model_act["action"] == "select"
         assert model_act["value"] == "A6"
 
+    def test_cross_lingual_payload_binding_without_dictionary(self, reflex):
+        """Verifies that English keys bind 1-to-1 to Polish form labels purely via structural partitioning + Cross-Encoder."""
+        candidates = [
+            {"ref": "aria-0", "role": "textbox", "name": "Imię", "context": "Formularz"},
+            {"ref": "aria-1", "role": "textbox", "name": "Nazwisko", "context": "Formularz"},
+            {"ref": "aria-2", "role": "textbox", "name": "Adres e-mail", "context": "Formularz"},
+            {"ref": "aria-3", "role": "textbox", "name": "Numer telefonu", "context": "Formularz"},
+            {"ref": "aria-4", "role": "combobox", "name": "Poziom doświadczenia", "context": "Formularz"},
+            {"ref": "aria-5", "role": "button", "name": "Załącz dokument CV", "context": "Formularz"},
+            {"ref": "aria-6", "role": "button", "name": "Dodaj certyfikaty (wiele plików)", "context": "Formularz"},
+            {
+                "ref": "aria-7",
+                "role": "checkbox",
+                "name": "Zgadzam się na przetwarzanie danych osobowych (RODO)",
+                "context": "Formularz",
+            },
+        ]
+        payload = {
+            "first_name": "Antoni",
+            "last_name": "Zieliński",
+            "email": "antoni.zielinski@example.com",
+            "phone": "+48 501 234 567",
+            "experience": "Senior",
+            "cv": "/tmp/cv.pdf",
+            "certificates": ["/tmp/c1.png", "/tmp/c2.png"],
+            "rodo": True,
+        }
+        actions = reflex.bind_payload_to_elements(payload, candidates)
+        assert len(actions) == 8
+        by_key = {a["payload_key"]: a for a in actions}
+        assert by_key["first_name"]["name"] == "Imię"
+        assert by_key["last_name"]["name"] == "Nazwisko"
+        assert by_key["email"]["name"] == "Adres e-mail"
+        assert by_key["phone"]["name"] == "Numer telefonu"
+        assert by_key["experience"]["name"] == "Poziom doświadczenia"
+        assert by_key["experience"]["action"] == "select"
+        assert by_key["cv"]["name"] == "Załącz dokument CV"
+        assert by_key["cv"]["action"] == "upload_file"
+        assert by_key["certificates"]["name"] == "Dodaj certyfikaty (wiele plików)"
+        assert by_key["rodo"]["action"] == "check"
+
 
 class TestBrowserEngineUpload:
     @pytest.mark.anyio
@@ -157,11 +204,9 @@ class TestBrowserEngineUpload:
         # Mock element is input:file
         mock_locator.evaluate = AsyncMock(return_value="input:file")
         mock_locator.set_input_files = AsyncMock()
-        engine._resolve_locator = AsyncMock(return_value=mock_locator)
+        engine._resolve_locator = AsyncMock(return_value=mock_locator)  # type: ignore[method-assign]
 
-        success = await engine.upload_file(
-            mock_page, role="button", name="Wybierz plik", file_paths="/tmp/test.pdf"
-        )
+        success = await engine.upload_file(mock_page, role="button", name="Wybierz plik", file_paths="/tmp/test.pdf")
         assert success is True
         mock_locator.set_input_files.assert_awaited_once()
 
@@ -175,7 +220,7 @@ class TestBrowserEngineUpload:
         mock_locator = AsyncMock()
         mock_locator.evaluate = AsyncMock(return_value="button:")
         mock_locator.click = AsyncMock()
-        engine._resolve_locator = AsyncMock(return_value=mock_locator)
+        engine._resolve_locator = AsyncMock(return_value=mock_locator)  # type: ignore[method-assign]
 
         # Mock expect_file_chooser context manager
         mock_fc = AsyncMock()

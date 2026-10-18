@@ -108,7 +108,7 @@ async def test_get_aria_snapshot_returns_semantic_tree():
     mock_locator = MagicMock()
     mock_locator.count = AsyncMock(return_value=1)
     mock_locator.aria_snapshot = AsyncMock(
-        return_value="- main:\n  - heading \"How to Register a Company\" [level=1]\n  - paragraph: Fill CEIDG-1 online.\n  - button \"Apply\""
+        return_value='- main:\n  - heading "How to Register a Company" [level=1]\n  - paragraph: Fill CEIDG-1 online.\n  - button "Apply"'
     )
     mock_page.locator.return_value = mock_locator
     mock_engine.get_page = AsyncMock(return_value=mock_page)

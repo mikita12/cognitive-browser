@@ -82,6 +82,28 @@ class TestAriaElementParser(unittest.TestCase):
         self.assertEqual(candidates[0]["name"], "Wyszukaj")
         self.assertEqual(candidates[1]["name"], "Zakładanie firmy")
 
+    def test_domain_models_and_parse_elements(self):
+        from cognitive_browser.models import ActionCommand, CandidateElement
+
+        elements = AriaElementParser.parse_elements(self.sample_snapshot)
+        self.assertGreater(len(elements), 0)
+        first = elements[0]
+        self.assertIsInstance(first, CandidateElement)
+        self.assertEqual(first.role, "link")
+        self.assertEqual(first.name, "Sign In")
+        self.assertEqual(first.url, "/account/login")
+        self.assertEqual(first.section, "header")
+        self.assertTrue(first.is_header)
+        # Dict compatibility check
+        self.assertEqual(first["role"], "link")
+        self.assertEqual(first.get("url"), "/account/login")
+
+        cmd = ActionCommand(action="click", target=first, confidence=0.95)
+        self.assertEqual(cmd.role, "link")
+        self.assertEqual(cmd.name, "Sign In")
+        self.assertEqual(cmd.url, "/account/login")
+        self.assertEqual(cmd["action"], "click")
+
     def test_route_cache_store_and_get(self):
         tmp_file = os.path.join(tempfile.gettempdir(), "test_route_cache_unit.json")
         if os.path.exists(tmp_file):
@@ -106,7 +128,9 @@ class TestAriaElementParser(unittest.TestCase):
         from cognitive_browser.reflex import ReflexCore
 
         # 1. Extract fill value from natural Polish & English instructions
-        q1 = ReflexCore.extract_fill_value('Wpisz w pole wyszukiwania: site:olx.pl "rtx 4070 ti" wrocław i kliknij szukaj')
+        q1 = ReflexCore.extract_fill_value(
+            'Wpisz w pole wyszukiwania: site:olx.pl "rtx 4070 ti" wrocław i kliknij szukaj'
+        )
         self.assertEqual(q1, 'site:olx.pl "rtx 4070 ti" wrocław')
 
         q2 = ReflexCore.extract_fill_value('Wpisz "RTX 4070 Ti" w wyszukiwarkę')
@@ -164,4 +188,3 @@ class TestAriaElementParser(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

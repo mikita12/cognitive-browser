@@ -1,15 +1,17 @@
 """
 Semantic ARIA accessibility tree parser for Cognitive Browser.
 Extracts interactive and structural elements from Playwright aria_snapshot() YAML
-into enriched, context-aware candidate objects for model evaluation and DOM execution.
+into strongly-typed CandidateElement domain objects (or plain dicts for JSON serialization).
 """
 
 import re
 from typing import Any, Dict, List, Optional
 
+from .models import CandidateElement, SectionType
+
 
 class AriaElementParser:
-    """Parses official page.aria_snapshot() YAML into context-aware candidate objects."""
+    """Parses official page.aria_snapshot() YAML into context-aware CandidateElement objects."""
 
     INTERACTIVE_ROLES = {
         "button",
@@ -43,36 +45,24 @@ class AriaElementParser:
     }
 
     # Matches lines like: - button "Szukaj" [expanded]: text or - button 'Szukaj'
-    PATTERN = re.compile(
-        r'^\s*-\s*([a-zA-Z0-9_-]+)(?:\s+["\']([^"\']*)["\'])?(?:\s+\[([^\]]+)\])*(?::\s*(.*))?$'
-    )
+    PATTERN = re.compile(r'^\s*-\s*([a-zA-Z0-9_-]+)(?:\s+["\']([^"\']*)["\'])?(?:\s+\[([^\]]+)\])*(?::\s*(.*))?$')
 
     @classmethod
-    def parse_snapshot(
+    def parse_elements(
         cls,
         snapshot_yaml: str,
         max_candidates: Optional[int] = 1000,
         require_input_only: bool = False,
         skip_boilerplate: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[CandidateElement]:
         """
-        Parses YAML output of page.aria_snapshot() into structured candidate objects.
-
-        Args:
-            snapshot_yaml: Raw YAML string returned by page.aria_snapshot().
-            max_candidates: Safety limit for candidate count (default: 1000, None for unlimited).
-            require_input_only: If True, only text/search/combo inputs are retained.
-            skip_boilerplate: If True, skips common footer/contentinfo noise candidates.
-
-        Returns:
-            List of candidate dictionaries enriched with role, name, context, nth index, and section flags.
+        Parses YAML output of page.aria_snapshot() into strongly-typed CandidateElement domain objects.
         """
-        candidates: List[Dict[str, Any]] = []
+        elements: List[CandidateElement] = []
         context_stack: List[tuple[int, str]] = []
         role_name_counts: Dict[tuple[str, str], int] = {}
 
-        lines = snapshot_yaml.splitlines()
-        for line in lines:
+        for line in snapshot_yaml.splitlines():
             clean = line.strip()
             if not clean.startswith("-"):
                 continue
@@ -80,18 +70,18 @@ class AriaElementParser:
             indent = len(line) - len(line.lstrip(" "))
 
             # Trailing URL metadata for preceding link candidate (Playwright snapshot extension)
-            if clean.startswith("- /url:") and candidates:
+            if clean.startswith("- /url:") and elements:
                 u = clean.replace("- /url:", "").strip().strip('"').strip("'")
-                candidates[-1]["url"] = u
+                elements[-1].url = u
                 continue
 
             # Trailing placeholder metadata for preceding input candidate
-            if clean.startswith("- /placeholder:") and candidates:
+            if clean.startswith("- /placeholder:") and elements:
                 ph = clean.replace("- /placeholder:", "").strip().strip('"').strip("'")
-                candidates[-1]["placeholder"] = ph
-                if not candidates[-1]["name"]:
-                    candidates[-1]["name"] = ph
-                candidates[-1]["text"] = f"{candidates[-1]['text']} (placeholder: {ph})".strip()
+                elements[-1].placeholder = ph
+                if not elements[-1].name:
+                    elements[-1].name = ph
+                elements[-1].text = f"{elements[-1].text} (placeholder: {ph})".strip()
                 continue
 
             # Unwrapping single-quoted YAML keys (e.g. - 'link "name: with colon"':)
@@ -108,9 +98,7 @@ class AriaElementParser:
             label = name if name else text_val
 
             # Strip Private Use Area (PUA) font icons (both raw unicode and literal \u escapes)
-            clean_label = re.sub(
-                r"[\ue000-\uf8ff\uf000-\uffff]|\\u[e-fE-F][0-9a-fA-F]{3}", "", label
-            ).strip()
+            clean_label = re.sub(r"[\ue000-\uf8ff\uf000-\uffff]|\\u[e-fE-F][0-9a-fA-F]{3}", "", label).strip()
             if clean_label:
                 label = clean_label
 
@@ -127,13 +115,11 @@ class AriaElementParser:
                 context_stack.append((indent, ctx_label))
 
             # Filter for text input operations when required
-            if require_input_only and role not in ["textbox", "combobox", "searchbox", "spinbutton"]:
+            if require_input_only and role not in ("textbox", "combobox", "searchbox", "spinbutton"):
                 continue
 
             # Check section context breadcrumbs
-            context_str = " > ".join(
-                c[1] for c in context_stack[-3:] if c[0] < indent or c[1].startswith("heading:")
-            )
+            context_str = " > ".join(c[1] for c in context_stack[-3:] if c[0] < indent or c[1].startswith("heading:"))
             context_lower = context_str.lower()
 
             # Optional early skip for footer / contentinfo noise
@@ -148,24 +134,48 @@ class AriaElementParser:
                 nth_index = role_name_counts.get(key, 0)
                 role_name_counts[key] = nth_index + 1
 
-                cand_obj: Dict[str, Any] = {
-                    "ref": f"aria-{len(candidates)}",
-                    "role": role,
-                    "tag": role,
-                    "name": label[:120],
-                    "text": effective_label[:120],
-                    "context": context_str,
-                    "nth": nth_index,
-                    "raw": clean,
-                    "is_main": "main" in context_lower,
-                    "is_footer": "contentinfo" in context_lower or "footer" in context_lower,
-                    "is_header": "banner" in context_lower or "header" in context_lower,
-                }
-                if attr_str:
-                    cand_obj["state"] = attr_str
-                candidates.append(cand_obj)
+                section: SectionType = "body"
+                if "contentinfo" in context_lower or "footer" in context_lower:
+                    section = "footer"
+                elif "banner" in context_lower or "header" in context_lower:
+                    section = "header"
+                elif "main" in context_lower:
+                    section = "main"
 
-            if max_candidates is not None and len(candidates) >= max_candidates:
+                elem = CandidateElement(
+                    ref=f"aria-{len(elements)}",
+                    role=role,
+                    name=label[:120],
+                    text=effective_label[:120],
+                    context=context_str,
+                    nth=nth_index,
+                    state=attr_str if attr_str else None,
+                    raw=clean,
+                    section=section,
+                )
+                elements.append(elem)
+
+            if max_candidates is not None and len(elements) >= max_candidates:
                 break
 
-        return candidates
+        return elements
+
+    @classmethod
+    def parse_snapshot(
+        cls,
+        snapshot_yaml: str,
+        max_candidates: Optional[int] = 1000,
+        require_input_only: bool = False,
+        skip_boilerplate: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Parses YAML output of page.aria_snapshot() into candidate dictionaries.
+        Delegates parsing to `parse_elements()` and serializes each CandidateElement via `.to_dict()`.
+        """
+        elements = cls.parse_elements(
+            snapshot_yaml,
+            max_candidates=max_candidates,
+            require_input_only=require_input_only,
+            skip_boilerplate=skip_boilerplate,
+        )
+        return [el.to_dict() for el in elements]

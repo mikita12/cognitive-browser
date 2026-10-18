@@ -1,151 +1,158 @@
 """
 Semantic payload and form parameter binding engine for Cognitive Browser.
 Performs universal bipartite matching between user-provided data dictionaries
-(e.g., job application details, search filters, uploaded documents) and DOM interactive controls.
+and DOM interactive controls using structural role partitioning and neural scoring.
 """
 
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+import unicodedata
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
-import torch
+from .models import ActionCommand, ActionType, CandidateElement
+
+
+def _normalize_ascii(text: str) -> str:
+    """Strips diacritics, hyphens, and punctuation for universal lexical comparison."""
+    text = text.lower().replace("ł", "l").replace("-", "").replace("_", " ")
+    nfkd = unicodedata.normalize("NFKD", text)
+    ascii_str = "".join(c for c in nfkd if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9\s]", " ", ascii_str).strip()
+
+
+def _lexical_overlap_score(key_str: str, label_str: str) -> float:
+    """Computes normalized token/stem overlap between a payload key and a control label."""
+    k_norm = _normalize_ascii(key_str)
+    l_norm = _normalize_ascii(label_str)
+    if not k_norm or not l_norm:
+        return 0.0
+    if k_norm == l_norm:
+        return 0.65
+    # Condensed check for compound words like "e-mail" vs "email"
+    if k_norm.replace(" ", "") in l_norm.replace(" ", ""):
+        return 0.50
+
+    k_tokens = [t for t in k_norm.split() if len(t) >= 2]
+    l_tokens = [t for t in l_norm.split() if len(t) >= 2]
+    if not k_tokens or not l_tokens:
+        return 0.0
+
+    matches = 0
+    for kt in k_tokens:
+        stem = kt[:4] if len(kt) >= 5 else kt
+        if any(lt == kt or lt.startswith(stem) or kt.startswith(lt[:4]) for lt in l_tokens if len(lt) >= 2):
+            matches += 1
+    return 0.45 * (matches / len(k_tokens))
 
 
 class PayloadBinder:
-    """Binds arbitrary payload dictionary parameters to web form controls using neural semantic ranking."""
+    """
+    Binds arbitrary payload dictionary parameters to web form controls.
+    1. Partitions payload values by structural type (file upload, boolean toggle, text/select input).
+    2. Filters DOM controls to compatible ARIA roles for each structural type.
+    3. Scores (key, control_label) pairs via `router.score_pairs()` without hardcoded synonym dictionaries.
+    4. Solves 1-to-1 greedy bipartite matching and orders resulting ActionCommands top-to-bottom by DOM index.
+    """
 
-    COMMON_FILE_EXTENSIONS: Tuple[str, ...] = (
-        ".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".webp",
-        ".txt", ".csv", ".zip", ".xlsx", ".xls", ".json", ".rtf",
-        ".odt", ".svg", ".gif", ".mp4", ".mov"
+    FILE_EXTENSIONS: Tuple[str, ...] = (
+        ".pdf",
+        ".docx",
+        ".doc",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".txt",
+        ".csv",
+        ".zip",
+        ".xlsx",
+        ".xls",
+        ".json",
+        ".rtf",
+        ".odt",
+        ".svg",
+        ".gif",
+        ".mp4",
+        ".mov",
     )
 
-    FILE_KEYWORDS: Set[str] = {
-        "cv", "resume", "plik", "file", "zalacznik", "załącznik",
-        "attachment", "upload", "dokument", "photo", "foto", "zdjecie",
-        "zdjęcie", "files", "pliki", "zdjęcia"
-    }
-
-    SEMANTIC_EXPANSIONS: Dict[str, str] = {
-        "first_name": "imię imie first name",
-        "imie": "imię imie first name",
-        "last_name": "nazwisko last name surname family name",
-        "nazwisko": "nazwisko last name surname family name",
-        "full_name": "imię i nazwisko full name",
-        "imie_i_nazwisko": "imię i nazwisko full name",
-        "email": "adres email e-mail mail poczta elektroniczna",
-        "mail": "adres email e-mail mail poczta elektroniczna",
-        "phone": "numer telefonu telefon phone tel telephone mobile",
-        "telefon": "numer telefonu telefon phone tel komórkowy",
-        "nr_telefonu": "numer telefonu telefon phone tel",
-        "city": "miasto city miejscowość",
-        "miasto": "miasto city miejscowość",
-        "address": "adres ulica address street",
-        "adres": "adres ulica address street",
-        "postal_code": "kod pocztowy postal code zip",
-        "kod_pocztowy": "kod pocztowy postal code zip",
-        "zip": "kod pocztowy postal code zip",
-        "country": "kraj państwo country",
-        "kraj": "kraj państwo country",
-        "salary": "wynagrodzenie stawka pensja oczekiwania finansowe salary expected rate",
-        "wynagrodzenie": "wynagrodzenie stawka pensja oczekiwania finansowe salary",
-        "experience": "doświadczenie experience lata staż pracy years",
-        "doswiadczenie": "doświadczenie experience lata staż pracy years",
-        "linkedin": "profil linkedin url link",
-        "github": "profil github portfolio strona www",
-        "portfolio": "portfolio github strona projekty cv",
-        "agreement": "zgoda rodo przetwarzanie danych regulamin oświadczenie consent terms",
-        "consent": "zgoda rodo przetwarzanie danych regulamin oświadczenie consent terms",
-        "rodo": "zgoda na przetwarzanie danych osobowych rodo consent privacy",
-        "summary": "podsumowanie o mnie list motywacyjny cover letter summary about me",
-        "message": "wiadomość treść list motywacyjny cover letter message note",
-        "query": "wyszukaj szukaj search find query",
-        "search": "wyszukaj szukaj search find query",
+    FORM_ROLES: Set[str] = {
+        "textbox",
+        "searchbox",
+        "combobox",
+        "spinbutton",
+        "checkbox",
+        "radio",
+        "switch",
+        "button",
+        "option",
     }
 
     def __init__(self, router: Any):
-        """Initializes PayloadBinder with a neural model/router instance."""
+        """Initializes PayloadBinder with a neural scorer instance exposing `score_pairs()`."""
         self.router = router
 
-    def bind(
+    @classmethod
+    def _is_file_value(cls, raw_val: Any) -> Tuple[bool, Optional[List[str]]]:
+        """Detects whether a payload value represents one or more file paths based on file extensions."""
+        if isinstance(raw_val, (list, tuple)) and raw_val:
+            strs = [str(x).strip() for x in raw_val if x is not None]
+            if strs and any(s.lower().endswith(cls.FILE_EXTENSIONS) or "/" in s for s in strs):
+                return True, strs
+        elif isinstance(raw_val, str):
+            s_val = raw_val.strip()
+            if s_val.lower().endswith(cls.FILE_EXTENSIONS):
+                return True, [s_val]
+        return False, None
+
+    @staticmethod
+    def _is_bool_value(raw_val: Any) -> Tuple[bool, bool]:
+        """Detects whether a payload value is a boolean flag."""
+        if isinstance(raw_val, bool):
+            return True, raw_val
+        if isinstance(raw_val, str) and raw_val.strip().lower() in ("true", "false"):
+            return True, raw_val.strip().lower() == "true"
+        return False, False
+
+    def bind_commands(
         self,
         payload: Dict[str, Any],
-        candidates: List[Dict[str, Any]],
-        min_confidence: float = 0.30,
-    ) -> List[Dict[str, Any]]:
+        candidates: Sequence[Union[CandidateElement, Dict[str, Any]]],
+        min_confidence: float = 0.20,
+    ) -> List[ActionCommand]:
         """
-        Universal neural semantic bipartite matching between arbitrary user payload and form elements.
-        Resolves form fields without hardcoded schemas:
-          - Automatically identifies file uploads (single or multi-file lists) and triggers upload_file.
-          - Maps text inputs, selects, checkboxes, and buttons with optimal 1-to-1 matching.
-          - Preserves DOM order for deterministic form filling from top to bottom.
+        Matches payload entries 1-to-1 against form controls and returns ordered ActionCommand objects.
         """
         if not payload or not candidates:
             return []
 
-        has_comboboxes = any((c.get("role") or "").lower() == "combobox" for c in candidates)
-        form_roles = {
-            "textbox",
-            "searchbox",
-            "combobox",
-            "spinbutton",
-            "checkbox",
-            "radio",
-            "switch",
-            "button",
-        }
-        if not has_comboboxes:
-            form_roles.add("option")
+        elements = [CandidateElement.from_dict(c) for c in candidates]
+        has_comboboxes = any(el.role == "combobox" for el in elements)
 
-        valid_cands = [c for c in candidates if (c.get("role") or "").lower() in form_roles]
-        if not valid_cands:
+        valid_elements: List[CandidateElement] = []
+        for el in elements:
+            if el.role not in self.FORM_ROLES:
+                continue
+            if el.role == "option" and has_comboboxes:
+                continue
+            valid_elements.append(el)
+
+        if not valid_elements:
             return []
 
-        # Parse and expand payload keys
-        parsed_items = []
+        # 1. Classify payload items structurally
+        parsed_items: List[Dict[str, Any]] = []
         for key, raw_val in payload.items():
             if raw_val is None:
                 continue
-
-            k_lower = str(key).lower().strip()
-            clean_k = k_lower.replace("_", " ").replace("-", " ")
-
-            is_file = False
-            file_paths: Optional[List[str]] = None
-            if isinstance(raw_val, (list, tuple)):
-                if any(any(str(x).lower().endswith(ext) for ext in self.COMMON_FILE_EXTENSIONS) for x in raw_val) or any(
-                    kw in k_lower for kw in self.FILE_KEYWORDS
-                ):
-                    is_file = True
-                    file_paths = [str(x) for x in raw_val]
-            elif isinstance(raw_val, str):
-                s_val = raw_val.lower().strip()
-                if any(s_val.endswith(ext) for ext in self.COMMON_FILE_EXTENSIONS) or any(kw in k_lower for kw in self.FILE_KEYWORDS):
-                    is_file = True
-                    file_paths = [raw_val]
-
-            is_bool = False
-            bool_val = False
-            if isinstance(raw_val, bool):
-                is_bool = True
-                bool_val = raw_val
-            elif isinstance(raw_val, str) and raw_val.lower() in ("true", "false", "tak", "nie"):
-                is_bool = True
-                bool_val = raw_val.lower() in ("true", "tak")
-
-            if k_lower in self.SEMANTIC_EXPANSIONS:
-                query = self.SEMANTIC_EXPANSIONS[k_lower]
-            elif is_file:
-                query = f"załącz plik dodaj dokument upload {clean_k}"
-            else:
-                query = f"{clean_k} {raw_val}"
+            clean_key = str(key).replace("_", " ").replace("-", " ").strip()
+            is_file, file_paths = self._is_file_value(raw_val)
+            is_bool, bool_val = (False, False) if is_file else self._is_bool_value(raw_val)
 
             parsed_items.append(
                 {
-                    "key": key,
-                    "k_lower": k_lower,
-                    "clean_k": clean_k,
+                    "key": str(key),
+                    "clean_key": clean_key,
                     "raw_val": raw_val,
-                    "query": query,
                     "is_file": is_file,
                     "file_paths": file_paths,
                     "is_bool": is_bool,
@@ -156,189 +163,131 @@ class PayloadBinder:
         if not parsed_items:
             return []
 
-        # Construct pairs for neural evaluation: (query, candidate_description)
+        # 2. Build compatible (payload_item, candidate_element) pairs for neural scoring
         pairs: List[List[str]] = []
-        pair_meta: List[Tuple[int, int]] = []  # (item_idx, cand_idx)
+        pair_meta: List[Tuple[int, int]] = []
 
         for p_idx, p_item in enumerate(parsed_items):
-            for c_idx, cand in enumerate(valid_cands):
-                role = cand.get("role") or ""
-                name = cand.get("name") or ""
-                ctx = cand.get("context") or ""
-                desc = f"[{role}] {name} (context: {ctx})"
-                if getattr(self.router, "is_reranker", False):
-                    pairs.append([p_item["query"], desc])
+            for c_idx, el in enumerate(valid_elements):
+                # Strict structural role compatibility filter
+                if p_item["is_bool"]:
+                    if not el.is_boolean_control:
+                        continue
+                elif p_item["is_file"]:
+                    if el.role not in ("button", "textbox"):
+                        continue
                 else:
-                    hypothesis = f"This element represents, opens, or is used to {p_item['query']}."
-                    pairs.append([desc, hypothesis])
+                    if el.role not in ("textbox", "searchbox", "combobox", "spinbutton", "option"):
+                        continue
+
+                label = el.name or el.text or el.role
+                query_text = p_item["clean_key"]
+                if not p_item["is_file"] and not p_item["is_bool"] and el.role in ("combobox", "option"):
+                    query_text = f"{p_item['clean_key']}: {p_item['raw_val']}"
+
+                if getattr(self.router, "is_reranker", True):
+                    pairs.append([query_text, label])
+                else:
+                    pairs.append([label, f"This form field is for {query_text}."])
                 pair_meta.append((p_idx, c_idx))
 
-        raw_probs = [0.0] * len(pairs)
-        if pairs and hasattr(self.router, "tokenizer") and hasattr(self.router, "model"):
-            indexed_pairs = list(enumerate(pairs))
-            indexed_pairs.sort(key=lambda x: len(x[1][0]) + len(x[1][1]))
-            batch_size = 64
+        # 3. Score all compatible pairs in a single call to router.score_pairs()
+        neural_scores = (
+            self.router.score_pairs(pairs) if pairs and hasattr(self.router, "score_pairs") else [0.5] * len(pairs)
+        )
 
-            with torch.no_grad():
-                for b_start in range(0, len(indexed_pairs), batch_size):
-                    b_slice = indexed_pairs[b_start : b_start + batch_size]
-                    b_pairs = [item[1] for item in b_slice]
-                    b_indices = [item[0] for item in b_slice]
-
-                    inputs = self.router.tokenizer(
-                        b_pairs, padding=True, truncation=True, max_length=512, return_tensors="pt"
-                    ).to(self.router.device)
-                    outputs = self.router.model(**inputs)
-                    logits = outputs.logits
-
-                    if getattr(self.router, "is_reranker", False):
-                        squeezed = logits.squeeze(-1)
-                        if "mmarco" in getattr(self.router, "model_name", "").lower():
-                            b_probs = torch.sigmoid((squeezed + 4.5) / 2.0)
-                        else:
-                            b_probs = torch.sigmoid(squeezed)
-                        if b_probs.ndim == 0:
-                            b_probs = b_probs.unsqueeze(0)
-                    else:
-                        binary_logits = logits[:, [self.router.contra_idx, self.router.entail_idx]]
-                        b_probs = torch.softmax(binary_logits, dim=-1)[:, 1]
-
-                    for orig_idx, prob_val in zip(b_indices, b_probs, strict=False):
-                        raw_probs[orig_idx] = float(prob_val.item())
-
-            if getattr(self.router, "device", "") == "cuda":
-                torch.cuda.synchronize()
-
-        # Compute boosts and collect scores
-        match_candidates = []
-        for pair_i, (p_idx, c_idx) in enumerate(pair_meta):
+        # 4. Combine neural probability with normalized lexical token overlap
+        match_candidates: List[Dict[str, Any]] = []
+        for idx, (p_idx, c_idx) in enumerate(pair_meta):
             p_item = parsed_items[p_idx]
-            cand = valid_cands[c_idx]
+            el = valid_elements[c_idx]
+            base_prob = neural_scores[idx]
+            lex_boost = _lexical_overlap_score(p_item["clean_key"], f"{el.name} {el.context}")
 
-            raw_prob = raw_probs[pair_i]
-            c_role = (cand.get("role") or "").lower()
-            c_name = f"{cand.get('name') or ''} {cand.get('context') or ''}".lower()
+            # Prefer buttons over textboxes for file uploads
+            role_bonus = 0.15 if (p_item["is_file"] and el.role == "button") else 0.0
+            final_score = min(0.99, base_prob + lex_boost + role_bonus)
 
-            boost = 0.0
+            if final_score < min_confidence:
+                continue
 
-            # Role & Category affinity
             if p_item["is_file"]:
-                has_file_kw = any(kw in c_name for kw in self.FILE_KEYWORDS) or any(
-                    w in c_name for w in ["wybierz plik", "dodaj plik", "browse", "załącz", "załaduj"]
-                )
-                if has_file_kw or c_role == "button":
-                    boost += 0.45
-                if c_role in ("textbox", "searchbox") and not has_file_kw:
-                    boost -= 0.50
-            else:
-                has_file_kw = any(kw in c_name for kw in self.FILE_KEYWORDS) or "wybierz plik" in c_name
-                if has_file_kw:
-                    boost -= 0.50
-
-                if p_item["is_bool"]:
-                    if c_role in ("checkbox", "radio", "switch"):
-                        boost += 0.35
-                    elif c_role in ("textbox", "searchbox"):
-                        boost -= 0.40
-                else:
-                    if c_role in ("textbox", "searchbox", "combobox", "spinbutton", "option"):
-                        boost += 0.20
-                    elif c_role in ("checkbox", "switch", "radio"):
-                        boost -= 0.45
-
-            # Keyword & stem lexical matching against candidate name
-            query_words = set(re.findall(r"\w{3,}", p_item["query"].lower()))
-            c_words = set(re.findall(r"\w{3,}", c_name))
-
-            def _check_stem(w1: str, w2: str) -> bool:
-                min_l = min(len(w1), len(w2))
-                if min_l >= 4:
-                    return w1[:4] == w2[:4] or (w1[: min_l - 1] == w2[: min_l - 1])
-                return w1 in w2 or w2 in w1
-
-            exact_matches = sum(1 for qw in query_words if qw in c_words)
-            stem_matches = sum(
-                1 for qw in query_words if qw not in c_words and any(_check_stem(qw, cw) for cw in c_words)
-            )
-
-            if exact_matches > 0:
-                boost += min(0.40, exact_matches * 0.20)
-            elif stem_matches > 0:
-                boost += min(0.25, stem_matches * 0.12)
-
-            final_score = raw_prob + boost
-            final_score = float(max(0.0, min(1.0, final_score)))
-
-            # Determine optimal action
-            if p_item["is_file"]:
-                action = "upload_file"
-                action_val = None
-                action_files = p_item["file_paths"]
+                action: ActionType = "upload_file"
+                val: Optional[str] = None
+                files = p_item["file_paths"]
             elif p_item["is_bool"]:
                 action = "check" if p_item["bool_val"] else "uncheck"
-                action_val = None
-                action_files = None
-            elif c_role in ("combobox", "option"):
+                val = None
+                files = None
+            elif el.role in ("combobox", "option"):
                 action = "select"
-                action_val = str(p_item["raw_val"])
-                action_files = None
-            elif c_role == "button":
-                action = "click"
-                action_val = None
-                action_files = None
+                val = str(p_item["raw_val"])
+                files = None
             else:
                 action = "fill"
-                action_val = str(p_item["raw_val"])
-                action_files = None
+                val = str(p_item["raw_val"])
+                files = None
 
-            if final_score >= min_confidence:
-                match_candidates.append(
-                    {
-                        "score": final_score,
-                        "p_idx": p_idx,
-                        "c_idx": c_idx,
-                        "key": p_item["key"],
-                        "cand": cand,
-                        "action": action,
-                        "value": action_val,
-                        "file_paths": action_files,
-                    }
-                )
-
-        # Greedy maximum-weight bipartite matching
-        match_candidates.sort(key=lambda x: x["score"], reverse=True)
-
-        used_payload_keys: Set[str] = set()
-        used_cands: Set[int] = set()
-        matched_actions: List[Dict[str, Any]] = []
-
-        for m in match_candidates:
-            if m["key"] in used_payload_keys:
-                continue
-            if m["c_idx"] in used_cands:
-                continue
-
-            used_payload_keys.add(m["key"])
-            used_cands.add(m["c_idx"])
-
-            cand = m["cand"]
-            matched_actions.append(
+            match_candidates.append(
                 {
-                    "dom_index": m["c_idx"],
-                    "payload_key": m["key"],
-                    "action": m["action"],
-                    "role": cand.get("role"),
-                    "name": cand.get("name"),
-                    "nth": cand.get("nth", 0),
-                    "value": m["value"],
-                    "file_paths": m["file_paths"],
-                    "confidence": round(m["score"], 4),
+                    "score": final_score,
+                    "p_idx": p_idx,
+                    "c_idx": c_idx,
+                    "key": p_item["key"],
+                    "element": el,
+                    "action": action,
+                    "value": val,
+                    "files": files,
                 }
             )
 
-        # Sort actions according to original DOM order (from top of the page downwards)
-        matched_actions.sort(key=lambda x: x["dom_index"])
-        for act in matched_actions:
-            del act["dom_index"]
+        # 5. Greedy maximum-weight 1-to-1 bipartite matching
+        match_candidates.sort(key=lambda x: x["score"], reverse=True)
+        used_keys: Set[str] = set()
+        used_cands: Set[int] = set()
+        matched_pairs: List[Tuple[int, ActionCommand]] = []
 
-        return matched_actions
+        for m in match_candidates:
+            if m["key"] in used_keys or m["c_idx"] in used_cands:
+                continue
+            used_keys.add(m["key"])
+            used_cands.add(m["c_idx"])
+
+            cmd = ActionCommand(
+                action=m["action"],
+                target=m["element"],
+                value=m["value"],
+                files=m["files"],
+                confidence=round(m["score"], 4),
+                source="payload_binding",
+                payload_key=m["key"],
+            )
+            matched_pairs.append((m["c_idx"], cmd))
+
+        # 6. Sort matched commands top-to-bottom by DOM order
+        matched_pairs.sort(key=lambda item: item[0])
+        return [cmd for _, cmd in matched_pairs]
+
+    def bind(
+        self,
+        payload: Dict[str, Any],
+        candidates: Sequence[Union[CandidateElement, Dict[str, Any]]],
+        min_confidence: float = 0.20,
+    ) -> List[Dict[str, Any]]:
+        """
+        Backward-compatible wrapper returning a list of action dictionaries.
+        """
+        commands = self.bind_commands(payload, candidates, min_confidence=min_confidence)
+        return [
+            {
+                "payload_key": cmd.payload_key,
+                "action": cmd.action,
+                "role": cmd.role,
+                "name": cmd.name,
+                "nth": cmd.nth,
+                "value": cmd.value,
+                "file_paths": cmd.files,
+                "confidence": cmd.confidence,
+            }
+            for cmd in commands
+        ]

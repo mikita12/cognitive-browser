@@ -33,9 +33,7 @@ def find_firefox_profiles() -> List[str]:
     return profiles
 
 
-def extract_firefox_cookies(
-    domain: str, profile_path: Optional[str] = None
-) -> List[Dict[str, Any]]:
+def extract_firefox_cookies(domain: str, profile_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Extracts cookies for a specific domain from Firefox's cookies.sqlite.
     Safely copies the SQLite database to a temporary file to avoid locking issues.

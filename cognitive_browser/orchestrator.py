@@ -1,6 +1,6 @@
 """
 BrowserOrchestrator: Coordinates multi-hop autonomous web navigation, planned step workflows,
-universal parameter binding, RouteCache lookups, and CAPTCHA resolution.
+universal parameter binding, RouteCache lookups with self-healing, and CAPTCHA resolution.
 Unified engine used by both FastMCP and FastAPI servers.
 """
 
@@ -8,10 +8,11 @@ import asyncio
 import re
 import time
 import urllib.parse
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from .browser import BrowserEngine
 from .cache import RouteCache
+from .models import ActionCommand, CandidateElement
 from .parser import AriaElementParser
 from .reflex import ReflexCore
 from .security import mask_sensitive_value, validate_url
@@ -23,7 +24,7 @@ HIGH_CONFIDENCE_THRESHOLD = 0.55
 class BrowserOrchestrator:
     """
     Central orchestration engine for autonomous and planned browser interactions.
-    Unifies the multi-hop decision loop across MCP and REST interfaces.
+    Unifies the multi-hop decision loop across MCP and REST interfaces using `ActionCommand` contracts.
     """
 
     def __init__(
@@ -38,9 +39,9 @@ class BrowserOrchestrator:
         self.last_candidates: List[Dict[str, Any]] = []
 
     @staticmethod
-    def compact_candidates(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def compact_candidates(candidates: Sequence[Union[CandidateElement, Dict[str, Any]]]) -> List[Dict[str, Any]]:
         """Strips redundant fields from candidates to keep JSON payloads small (<8KB)."""
-        compact = []
+        compact: List[Dict[str, Any]] = []
         for c in candidates:
             item: Dict[str, Any] = {
                 "ref": c.get("ref"),
@@ -59,8 +60,8 @@ class BrowserOrchestrator:
     @staticmethod
     def clean_aria_lines(raw_aria: str, max_lines: int = 140, max_chars: int = 5800) -> str:
         """
-        Removes decorative noise lines (empty `- img`, `- separator`, repetitive `Wyczyść` filter buttons)
-        and collapses long runs of sidebar filter checkboxes.
+        Removes decorative empty ARIA primitives (`- img`, `- separator`, `- group`)
+        and collapses long runs of repetitive filter checkboxes.
         """
         raw_lines = raw_aria.splitlines()
         skip_banner = len(raw_lines) > max_lines
@@ -78,18 +79,11 @@ class BrowserOrchestrator:
                 "- img:",
                 '- text: ""',
                 "- group",
-                '- button "Wyczyść"',
-                '- grid "Skip links":',
-                '- row "Przejdź do głównej części":',
-                '- gridcell "Przejdź do głównej części"',
-                '- row "Przejdź do stopki":',
-                '- gridcell "Przejdź do stopki"',
             ):
                 continue
 
             indent = len(line) - len(line.lstrip(" "))
 
-            # Skip top site-wide header banner if the page is large
             if skip_banner:
                 if stripped.startswith("- banner"):
                     in_banner = True
@@ -98,10 +92,8 @@ class BrowserOrchestrator:
                 elif in_banner:
                     if indent > banner_indent:
                         continue
-                    else:
-                        in_banner = False
+                    in_banner = False
 
-            # Collapse sidebar filter lists of dozens of checkboxes
             if stripped.startswith("- checkbox"):
                 consecutive_checkboxes += 1
                 if consecutive_checkboxes > 4:
@@ -109,7 +101,6 @@ class BrowserOrchestrator:
             elif not stripped.startswith("- text:"):
                 consecutive_checkboxes = 0
 
-            # Trim huge tracking query parameters on /url: lines to save tokens
             if stripped.startswith("- /url:") and len(line) > 130:
                 line = line.split("?utm_")[0].split("&utm_")[0][:140]
 
@@ -140,6 +131,23 @@ class BrowserOrchestrator:
                 pass
         return {}
 
+    async def _check_and_resolve_captcha(self, page: Any, snapshot_yaml: str, current_title: str) -> tuple[str, str]:
+        """Evaluates CAPTCHA presence and resolves it if detected, returning updated (snapshot_yaml, title)."""
+        if hasattr(self.reflex, "evaluate_captcha_presence") and callable(self.reflex.evaluate_captcha_presence):
+            c_eval = self.reflex.evaluate_captcha_presence(
+                candidates=AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=50),
+                page_title=current_title,
+                page_url=str(page.url),
+                snapshot_yaml=snapshot_yaml,
+            )
+            if isinstance(c_eval, dict) and c_eval.get("is_captcha"):
+                c_res = await self.safe_resolve_captcha(page)
+                if c_res.get("solved"):
+                    await page.wait_for_timeout(1000)
+                    snapshot_yaml = await page.aria_snapshot()
+                    current_title = await page.title()
+        return snapshot_yaml, current_title
+
     async def extract_page_content(
         self,
         page: Any,
@@ -151,11 +159,17 @@ class BrowserOrchestrator:
         Combines summary with top-scoring deep chunks if ranked_chunks are available.
         """
         try:
-            for sel in ["main article", "article", "main", "body"]:
-                loc = page.locator(sel).first
-                if await loc.count() > 0:
+            for sel in ("main article", "article", "main", "body"):
+                raw_loc = page.locator(sel)
+                if asyncio.iscoroutine(raw_loc):
+                    raw_loc = await raw_loc
+                loc = raw_loc.first
+                cnt = loc.count()
+                if asyncio.iscoroutine(cnt):
+                    cnt = await cnt
+                if isinstance(cnt, int) and cnt > 0:
                     raw_aria = await loc.aria_snapshot()
-                    if len(raw_aria.strip()) > 60:
+                    if isinstance(raw_aria, str) and len(raw_aria.strip()) > 60:
                         if ranked_chunks and len(raw_aria.splitlines()) > max_lines:
                             selected_indices = {0, 1}
                             for rc in ranked_chunks[:3]:
@@ -176,24 +190,25 @@ class BrowserOrchestrator:
     async def dispatch_step_action(
         self,
         page: Any,
-        action_plan: Dict[str, Any],
+        action_plan: Union[ActionCommand, Dict[str, Any]],
         instruction: str = "",
     ) -> str:
-        """Executes an inferred or explicit action plan on BrowserEngine while preserving test mocks."""
-        act = action_plan.get("action", "click")
-        role = action_plan.get("role", "button")
-        name = action_plan.get("name", "")
-        nth = int(action_plan.get("nth", 0))
-        val = action_plan.get("value")
-        url = action_plan.get("url")
+        """Executes an ActionCommand on BrowserEngine while preserving test mocks and sensitive value masking."""
+        cmd = ActionCommand.from_dict(action_plan)
+        act = cmd.action
+        role = cmd.role
+        name = cmd.name
+        nth = cmd.nth
+        val = cmd.value
+        url = cmd.url
 
         if act == "scroll" and hasattr(self.engine, "scroll_page"):
-            direction = str(val or "down")
+            direction = str(val or cmd.direction or "down")
             await self.engine.scroll_page(page, direction=direction)
             return f"scroll('{direction}')"
 
         if act == "press" and hasattr(self.engine, "press_key"):
-            key = str(val or "Enter")
+            key = str(val or cmd.key or "Enter")
             await self.engine.press_key(page, key=key)
             return f"press('{key}')"
 
@@ -210,7 +225,7 @@ class BrowserOrchestrator:
             return f"{act}()"
 
         if act == "upload_file" and hasattr(self.engine, "upload_file"):
-            files = action_plan.get("file_paths") or val
+            files = cmd.files or val
             if files:
                 await self.engine.upload_file(page, role=role, name=name, file_paths=files, nth=nth)
                 return f"upload_file('{files}')"
@@ -224,12 +239,11 @@ class BrowserOrchestrator:
                 except TypeError:
                     await self.engine.fill_element(page, role=role, name=name, value=str(val))
                 return f"fill_and_submit('{masked_val}')"
+            if nth > 0:
+                await self.engine.fill_element(page, role=role, name=name, value=str(val), nth=nth)
             else:
-                if nth > 0:
-                    await self.engine.fill_element(page, role=role, name=name, value=str(val), nth=nth)
-                else:
-                    await self.engine.fill_element(page, role=role, name=name, value=str(val))
-                return f"fill('{masked_val}')"
+                await self.engine.fill_element(page, role=role, name=name, value=str(val))
+            return f"fill('{masked_val}')"
 
         if url and str(url).startswith("http"):
             valid_target = validate_url(str(url))
@@ -256,7 +270,7 @@ class BrowserOrchestrator:
         """
         Unified multi-hop execution flow supporting:
         - Mode A: Autonomous Goal Navigation on GPU (0 LLM tokens)
-        - Mode B: Planned Steps execution with RouteCache and candidate calibration
+        - Mode B: Planned Steps execution with RouteCache self-healing and candidate calibration
         - Universal Parameter Binding for complex forms and file uploads
         """
         t_start = time.perf_counter()
@@ -297,19 +311,20 @@ class BrowserOrchestrator:
                 bound_actions = self.reflex.bind_payload_to_elements(payload=payload, candidates=all_cands)
                 for b_act in bound_actions:
                     t_b = time.perf_counter()
+                    cmd = ActionCommand.from_dict(b_act)
                     action_desc = await self.dispatch_step_action(
                         page,
-                        b_act,
-                        instruction=f"Fill payload field: {b_act.get('payload_key')}",
+                        cmd,
+                        instruction=f"Fill payload field: {cmd.payload_key}",
                     )
                     b_ms = round((time.perf_counter() - t_b) * 1000, 2)
                     payload_steps_log.append(
                         {
                             "step": len(payload_steps_log) + 1,
-                            "instruction": f"Set payload field '{b_act.get('payload_key')}'",
-                            "executed_element": f"[{b_act.get('role')}] {b_act.get('name')}",
+                            "instruction": f"Set payload field '{cmd.payload_key}'",
+                            "executed_element": f"[{cmd.role}] {cmd.name}",
                             "action": action_desc,
-                            "confidence": b_act.get("confidence", 1.0),
+                            "confidence": cmd.confidence,
                             "latency_ms": b_ms,
                             "source": "payload_binding",
                             "status": "success",
@@ -337,40 +352,42 @@ class BrowserOrchestrator:
             steps_log: List[Dict[str, Any]] = list(payload_steps_log)
             total_reflex_gpu_ms = 0.0
 
-            # RouteCache lookup
             if has_cache and self.route_cache is not None:
                 cached_dest = self.route_cache.get(start_url, f"GOAL::{goal}")
                 if cached_dest and cached_dest.get("name", "").startswith("http"):
                     dest_url = validate_url(cached_dest["name"])
                     t_c = time.perf_counter()
-                    await page.goto(dest_url, wait_until="domcontentloaded", timeout=15000)
-                    await page.wait_for_timeout(250)
-                    cache_ms = round((time.perf_counter() - t_c) * 1000, 2)
-                    steps_log.append(
-                        {
-                            "step": 1,
-                            "instruction": f"Direct cached jump for goal: {goal}",
-                            "executed_element": f"[url] {dest_url}",
-                            "action": "goto()",
-                            "confidence": 1.0,
-                            "latency_ms": cache_ms,
-                            "source": "route_cache",
+                    try:
+                        await page.goto(dest_url, wait_until="domcontentloaded", timeout=15000)
+                        await page.wait_for_timeout(250)
+                        cache_ms = round((time.perf_counter() - t_c) * 1000, 2)
+                        steps_log.append(
+                            {
+                                "step": 1,
+                                "instruction": f"Direct cached jump for goal: {goal}",
+                                "executed_element": f"[url] {dest_url}",
+                                "action": "goto()",
+                                "confidence": 1.0,
+                                "latency_ms": cache_ms,
+                                "source": "route_cache",
+                                "status": "success",
+                            }
+                        )
+                        return {
                             "status": "success",
+                            "final_url": page.url,
+                            "final_title": await page.title(),
+                            "steps_executed": 1,
+                            "telemetry": {
+                                "total_execution_seconds": round(time.perf_counter() - t_start, 2),
+                                "reflex_gpu_ms": 0.0,
+                                "tokens_consumed_by_server": 0,
+                            },
+                            "steps_log": steps_log,
+                            "page_content_snippet": await self.extract_page_content(page),
                         }
-                    )
-                    return {
-                        "status": "success",
-                        "final_url": page.url,
-                        "final_title": await page.title(),
-                        "steps_executed": 1,
-                        "telemetry": {
-                            "total_execution_seconds": round(time.perf_counter() - t_start, 2),
-                            "reflex_gpu_ms": 0.0,
-                            "tokens_consumed_by_server": 0,
-                        },
-                        "steps_log": steps_log,
-                        "page_content_snippet": await self.extract_page_content(page),
-                    }
+                    except Exception:
+                        self.route_cache.invalidate(start_url, f"GOAL::{goal}")
 
             visited: set[tuple[str, str]] = set()
             goal_words = {
@@ -378,10 +395,24 @@ class BrowserOrchestrator:
                 for w in re.findall(r"\w{4,}", goal.lower())
                 if w
                 not in {
-                    "oraz", "jak", "gdzie", "kiedy", "żeby", "zeby",
-                    "strona", "stronie", "znajdz", "znajdź", "sprawdź",
-                    "sprawdz", "zobacz", "pokaż", "wyszukaj", "odczytaj",
-                    "cookies", "zaakceptuj",
+                    "oraz",
+                    "jak",
+                    "gdzie",
+                    "kiedy",
+                    "żeby",
+                    "zeby",
+                    "strona",
+                    "stronie",
+                    "znajdz",
+                    "znajdź",
+                    "sprawdź",
+                    "sprawdz",
+                    "zobacz",
+                    "pokaż",
+                    "wyszukaj",
+                    "odczytaj",
+                    "cookies",
+                    "zaakceptuj",
                 }
             }
             extracted_query = ReflexCore.extract_fill_value(goal)
@@ -392,29 +423,12 @@ class BrowserOrchestrator:
             for hop in range(1, 6):
                 snapshot_yaml = await page.aria_snapshot()
                 current_title = await page.title()
+                snapshot_yaml, current_title = await self._check_and_resolve_captcha(page, snapshot_yaml, current_title)
 
-                # Check for CAPTCHA challenges
-                if hasattr(self.reflex, "evaluate_captcha_presence"):
-                    c_eval = self.reflex.evaluate_captcha_presence(
-                        candidates=AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=50),
-                        page_title=current_title,
-                        page_url=str(page.url),
-                        snapshot_yaml=snapshot_yaml,
-                    )
-                    if c_eval.get("is_captcha"):
-                        c_res = await self.safe_resolve_captcha(page)
-                        if c_res.get("solved"):
-                            await page.wait_for_timeout(1000)
-                            snapshot_yaml = await page.aria_snapshot()
-                            current_title = await page.title()
-
-                # GPU STATE EVALUATION
                 if hasattr(self.reflex, "evaluate_page_satisfaction") and callable(
                     self.reflex.evaluate_page_satisfaction
                 ):
-                    sat_res = self.reflex.evaluate_page_satisfaction(
-                        goal, snapshot_yaml, current_title, str(page.url)
-                    )
+                    sat_res = self.reflex.evaluate_page_satisfaction(goal, snapshot_yaml, current_title, str(page.url))
                     if isinstance(sat_res, dict):
                         total_reflex_gpu_ms += float(sat_res.get("latency_ms", 0.0))
                         last_satisfaction_rate = float(sat_res.get("goal_satisfaction_rate", 0.0))
@@ -422,7 +436,6 @@ class BrowserOrchestrator:
                         if sat_res.get("is_satisfied"):
                             break
 
-                # Fallback structural check
                 if ReflexCore.is_goal_satisfied_on_page(goal, snapshot_yaml, current_title, str(page.url)):
                     last_satisfaction_rate = max(last_satisfaction_rate, 0.90)
                     break
@@ -430,7 +443,6 @@ class BrowserOrchestrator:
                 all_cands = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=150)
                 self.last_candidates = all_cands
 
-                # Filter out visited elements and noise
                 avail = [
                     c
                     for c in all_cands
@@ -438,9 +450,16 @@ class BrowserOrchestrator:
                     and not ReflexCore.is_noise_candidate(c, goal)
                     and c["role"]
                     in (
-                        "link", "button", "tab", "menuitem",
-                        "searchbox", "textbox", "combobox",
-                        "checkbox", "radio", "option",
+                        "link",
+                        "button",
+                        "tab",
+                        "menuitem",
+                        "searchbox",
+                        "textbox",
+                        "combobox",
+                        "checkbox",
+                        "radio",
+                        "option",
                     )
                 ]
                 if not avail:
@@ -455,11 +474,9 @@ class BrowserOrchestrator:
                 total_reflex_gpu_ms += decision.get("latency_ms", 0.0)
                 confidence = float(decision.get("confidence", 0.0))
 
-                # STATE vs ACTION COMPETITION:
                 if last_satisfaction_rate >= 0.65 and last_satisfaction_rate > confidence + 0.05:
                     break
 
-                # Confidence brake
                 if confidence < MIN_GOAL_CONFIDENCE and not (
                     extracted_query and not did_fill_search and avail[0]["role"] in ("searchbox", "textbox")
                 ):
@@ -470,14 +487,17 @@ class BrowserOrchestrator:
                 name = best["name"]
                 visited.add((role, name))
 
-                action_plan = ReflexCore.infer_action_plan(
-                    goal, best, explicit_fill_value=extracted_query if not did_fill_search else None
+                cmd = ReflexCore.infer_action_command(
+                    goal,
+                    best,
+                    explicit_fill_value=extracted_query if not did_fill_search else None,
+                    confidence=confidence,
                 )
-                if action_plan["action"] in ("fill", "fill_and_submit"):
+                if cmd.action in ("fill", "fill_and_submit"):
                     did_fill_search = True
 
                 try:
-                    action_desc = await self.dispatch_step_action(page, action_plan, instruction=goal)
+                    action_desc = await self.dispatch_step_action(page, cmd, instruction=goal)
                     await page.wait_for_timeout(300)
                     steps_log.append(
                         {
@@ -493,7 +513,7 @@ class BrowserOrchestrator:
                         }
                     )
 
-                    if action_plan["action"] == "fill_and_submit":
+                    if cmd.action == "fill_and_submit":
                         await page.wait_for_timeout(400)
                         continue
 
@@ -501,19 +521,20 @@ class BrowserOrchestrator:
                     name_lower = name.lower()
                     cand_url = best.get("url")
                     matches_in_title = sum(1 for gw in goal_words if gw[:5] in title_lower or gw[:5] in name_lower)
-                    if (cand_url and str(cand_url).startswith("http") and matches_in_title >= 2) or matches_in_title >= 3:
+                    if (
+                        cand_url and str(cand_url).startswith("http") and matches_in_title >= 2
+                    ) or matches_in_title >= 3:
                         break
                 except Exception:
                     continue
 
-            # Store direct shortcut in RouteCache if navigated
             final_url_str = str(page.url)
             if (
                 has_cache
                 and self.route_cache is not None
                 and final_url_str != start_url
                 and len(steps_log) > 0
-                and not any(k in final_url_str.lower() for k in ["captcha", "sorry", "error", "login"])
+                and not any(k in final_url_str.lower() for k in ("captcha", "sorry", "error", "login"))
             ):
                 self.route_cache.store(start_url, f"GOAL::{goal}", role="url", name=final_url_str, action="goto")
 
@@ -558,14 +579,14 @@ class BrowserOrchestrator:
             explicit_action = s.get("action")
             current_page_url = str(page.url)
 
-            # Page-level actions (scroll / press)
             if explicit_action in ("scroll", "press"):
                 t_act = time.perf_counter()
-                action_desc = await self.dispatch_step_action(
-                    page,
-                    {"action": explicit_action, "value": fill_val or ("down" if explicit_action == "scroll" else "Enter")},
-                    instruction=instruction,
+                cmd = ActionCommand(
+                    action=explicit_action,
+                    value=fill_val or ("down" if explicit_action == "scroll" else "Enter"),
+                    source="reflex_direct",
                 )
+                action_desc = await self.dispatch_step_action(page, cmd, instruction=instruction)
                 act_ms = round((time.perf_counter() - t_act) * 1000, 2)
                 steps_log.append(
                     {
@@ -581,7 +602,7 @@ class BrowserOrchestrator:
                 )
                 continue
 
-            # RouteCache fast path
+            # RouteCache fast path with automatic self-healing on failure
             if has_cache and self.route_cache is not None:
                 cached = self.route_cache.get(current_page_url, instruction)
                 if cached:
@@ -591,11 +612,15 @@ class BrowserOrchestrator:
                     c_act = explicit_action or cached.get("action") or ("fill" if fill_val else "click")
                     t_cache = time.perf_counter()
                     try:
-                        action_desc = await self.dispatch_step_action(
-                            page,
-                            {"action": c_act, "role": c_role, "name": c_name, "nth": c_nth, "value": fill_val},
-                            instruction=instruction,
+                        cmd = ActionCommand(
+                            action=c_act,
+                            role=c_role,
+                            name=c_name,
+                            nth=c_nth,
+                            value=fill_val,
+                            source="route_cache",
                         )
+                        action_desc = await self.dispatch_step_action(page, cmd, instruction=instruction)
                         cache_ms = round((time.perf_counter() - t_cache) * 1000, 2)
                         await page.wait_for_timeout(250)
                         self.route_cache.store(
@@ -621,23 +646,11 @@ class BrowserOrchestrator:
                         )
                         continue
                     except Exception:
-                        pass
+                        # Self-healing: evict stale route and fall through to neural evaluation
+                        self.route_cache.invalidate(current_page_url, instruction)
 
             snapshot_yaml = await page.aria_snapshot()
-
-            # Captcha check
-            if hasattr(self.reflex, "evaluate_captcha_presence"):
-                c_eval = self.reflex.evaluate_captcha_presence(
-                    candidates=AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=50),
-                    page_title=await page.title(),
-                    page_url=current_page_url,
-                    snapshot_yaml=snapshot_yaml,
-                )
-                if c_eval.get("is_captcha"):
-                    c_res = await self.safe_resolve_captcha(page)
-                    if c_res.get("solved"):
-                        await page.wait_for_timeout(1000)
-                        snapshot_yaml = await page.aria_snapshot()
+            snapshot_yaml, _ = await self._check_and_resolve_captcha(page, snapshot_yaml, await page.title())
 
             candidates = AriaElementParser.parse_snapshot(
                 snapshot_yaml, max_candidates=150, require_input_only=bool(fill_val)
@@ -657,7 +670,6 @@ class BrowserOrchestrator:
             decision = self.reflex.evaluate_candidates(intent=instruction, candidates=candidates)
             total_reflex_gpu_ms += decision.get("latency_ms", 0.0)
 
-            # Agent-in-the-Loop escalation
             if decision.get("should_escalate") or decision.get("target_ref") == "NONE":
                 top_candidates = self.compact_candidates(decision.get("ranked_candidates", [])[:5])
                 remaining_steps = [s.get("instruction") for s in steps[idx:]]
@@ -687,27 +699,29 @@ class BrowserOrchestrator:
             nth = best.get("nth", 0)
 
             if explicit_action:
-                action_plan = {
-                    "action": explicit_action,
-                    "role": role,
-                    "name": name,
-                    "nth": nth,
-                    "value": fill_val if fill_val is not None else ReflexCore.extract_fill_value(instruction),
-                }
+                cmd = ActionCommand(
+                    action=explicit_action,
+                    role=role,
+                    name=name,
+                    nth=nth,
+                    value=fill_val if fill_val is not None else ReflexCore.extract_fill_value(instruction),
+                    confidence=decision["confidence"],
+                )
             elif fill_val is not None:
-                action_plan = {
-                    "action": "fill",
-                    "role": role,
-                    "name": name,
-                    "nth": nth,
-                    "value": fill_val,
-                }
+                cmd = ActionCommand(
+                    action="fill",
+                    role=role,
+                    name=name,
+                    nth=nth,
+                    value=fill_val,
+                    confidence=decision["confidence"],
+                )
             else:
-                action_plan = ReflexCore.infer_action_plan(instruction, best)
-                action_plan.pop("url", None)
+                cmd = ReflexCore.infer_action_command(instruction, best, confidence=decision["confidence"])
+                cmd.url = None
 
             try:
-                action_desc = await self.dispatch_step_action(page, action_plan, instruction=instruction)
+                action_desc = await self.dispatch_step_action(page, cmd, instruction=instruction)
 
                 if has_cache and self.route_cache is not None:
                     self.route_cache.store(
@@ -716,7 +730,7 @@ class BrowserOrchestrator:
                         role=role,
                         name=name,
                         nth=nth,
-                        action=action_plan["action"],
+                        action=cmd.action,
                         context=best.get("context", ""),
                     )
 
@@ -774,6 +788,8 @@ class BrowserOrchestrator:
         t_start = time.perf_counter()
         await self.engine.auto_dismiss_overlays(page)
 
+        files_list = [file_paths] if isinstance(file_paths, str) else (list(file_paths) if file_paths else None)
+
         if target_ref or target_name:
             chosen_candidate = None
             if target_ref and self.last_candidates:
@@ -798,17 +814,17 @@ class BrowserOrchestrator:
                 name = target_name or instruction
                 nth = 0
 
-            action_plan = ReflexCore.infer_action_plan(
+            cmd = ReflexCore.infer_action_command(
                 instruction, {"role": role, "name": name, "nth": nth}, explicit_fill_value=fill_value
             )
-            if file_paths is not None:
-                action_plan["action"] = "upload_file"
-                action_plan["file_paths"] = file_paths
-            elif fill_value is not None and action_plan["action"] not in ("fill", "fill_and_submit", "select"):
-                action_plan["action"] = "fill"
-                action_plan["value"] = fill_value
+            if files_list is not None:
+                cmd.action = "upload_file"
+                cmd.files = files_list
+            elif fill_value is not None and cmd.action not in ("fill", "fill_and_submit", "select"):
+                cmd.action = "fill"
+                cmd.value = fill_value
 
-            action_desc = await self.dispatch_step_action(page, action_plan, instruction=instruction)
+            action_desc = await self.dispatch_step_action(page, cmd, instruction=instruction)
             await page.wait_for_timeout(300)
             return {
                 "status": "success",
@@ -820,7 +836,9 @@ class BrowserOrchestrator:
             }
 
         snapshot_yaml = await page.aria_snapshot()
-        candidates = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=150, require_input_only=bool(fill_value))
+        candidates = AriaElementParser.parse_snapshot(
+            snapshot_yaml, max_candidates=150, require_input_only=bool(fill_value)
+        )
         self.last_candidates = candidates
 
         decision = self.reflex.evaluate_candidates(intent=instruction, candidates=candidates)
@@ -837,15 +855,17 @@ class BrowserOrchestrator:
         role = best["role"]
         name = best["name"]
 
-        action_plan = ReflexCore.infer_action_plan(instruction, best, explicit_fill_value=fill_value)
-        if file_paths is not None:
-            action_plan["action"] = "upload_file"
-            action_plan["file_paths"] = file_paths
-        elif fill_value is not None and action_plan["action"] not in ("fill", "fill_and_submit", "select"):
-            action_plan["action"] = "fill"
-            action_plan["value"] = fill_value
+        cmd = ReflexCore.infer_action_command(
+            instruction, best, explicit_fill_value=fill_value, confidence=decision["confidence"]
+        )
+        if files_list is not None:
+            cmd.action = "upload_file"
+            cmd.files = files_list
+        elif fill_value is not None and cmd.action not in ("fill", "fill_and_submit", "select"):
+            cmd.action = "fill"
+            cmd.value = fill_value
 
-        action_desc = await self.dispatch_step_action(page, action_plan, instruction=instruction)
+        action_desc = await self.dispatch_step_action(page, cmd, instruction=instruction)
         await page.wait_for_timeout(300)
         return {
             "status": "success",

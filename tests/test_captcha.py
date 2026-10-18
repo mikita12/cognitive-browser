@@ -96,11 +96,7 @@ def test_evaluate_captcha_presence_active_recaptcha_challenge():
     candidates = [
         {"role": "checkbox", "name": "I'm not a robot", "context": "recaptcha-anchor"},
     ]
-    snap = (
-        "- heading 'Security Verification'\n"
-        "- checkbox \"I'm not a robot\"\n"
-        "- text 'Protected by reCAPTCHA'"
-    )
+    snap = "- heading 'Security Verification'\n- checkbox \"I'm not a robot\"\n- text 'Protected by reCAPTCHA'"
     res = reflex.evaluate_captcha_presence(
         candidates=candidates,
         page_title="Verify you are human",
@@ -170,11 +166,13 @@ async def test_solve_turnstile_mock():
 
     poll_resp_mock = MagicMock()
     poll_resp_mock.__enter__.return_value = poll_resp_mock
-    poll_resp_mock.read.return_value = json.dumps({
-        "status": "ready",
-        "solution": {"token": "1.test_valid_turnstile_token_mock"},
-        "errorId": 0,
-    }).encode()
+    poll_resp_mock.read.return_value = json.dumps(
+        {
+            "status": "ready",
+            "solution": {"token": "1.test_valid_turnstile_token_mock"},
+            "errorId": 0,
+        }
+    ).encode()
 
     with patch("urllib.request.urlopen") as mock_urlopen:
         mock_urlopen.side_effect = [create_resp_mock, poll_resp_mock]

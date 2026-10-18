@@ -5,18 +5,13 @@ with Stealth BrowserEngine, RouteCache, full DOM action planning, and smart goal
 Refactored to delegate execution to BrowserOrchestrator.
 """
 
-import asyncio
-import time
 from typing import Any, Dict, List, Optional, Union
 
 from mcp.server.mcpserver import MCPServer
 
 from .browser import BrowserEngine
-from .cache import RouteCache
 from .orchestrator import BrowserOrchestrator
-from .parser import AriaElementParser
 from .reflex import ReflexCore
-from .security import mask_sensitive_value, validate_url
 
 SERVER_INSTRUCTIONS = (
     "Cognitive Browser is an ultra-fast, zero-token autonomous browser server powered by a local GPU Cross-Encoder (Reflex Core), Stealth BrowserEngine, and RouteCache.\n\n"

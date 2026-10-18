@@ -12,12 +12,12 @@ from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from .cache import RouteCache
 from .captcha import TURNSTILE_INTERCEPT_SCRIPT, CaptchaResolver
-from .reflex import AriaElementParser, ReflexCore
+from .models import ActionCommand, PageState
+from .parser import AriaElementParser
 from .security import setup_ssrf_route_guard
 
 STEALTH_USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
 STEALTH_INIT_SCRIPT = """
@@ -29,15 +29,15 @@ Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
 
 
 class BrowserEngine:
-    """Manages stealth Playwright sessions, route caching, and full autonomous DOM interactions."""
+    """Pure Playwright execution driver with Stealth anti-bot protections, SSRF guards, and ActionCommand execution."""
 
     def __init__(
         self,
-        reflex: Optional[ReflexCore] = None,
+        reflex: Optional[Any] = None,
         route_cache: Optional[RouteCache] = None,
         captcha_resolver: Optional[CaptchaResolver] = None,
     ):
-        self.reflex = reflex or ReflexCore()
+        self.reflex = reflex
         self.route_cache = route_cache or RouteCache()
         self.captcha_resolver = captcha_resolver or CaptchaResolver()
         self._playwright: Optional[Any] = None
@@ -131,22 +131,29 @@ class BrowserEngine:
         except Exception:
             pass
 
-        # Reflex GPU fallback on ARIA snapshot
+        return False
+
+    async def settle_dom(self, page: Page, timeout_ms: int = 1200) -> None:
+        """Waits briefly for DOM and SPA transitions to stabilize after an action."""
         try:
-            snapshot = await page.aria_snapshot()
-            candidates = AriaElementParser.parse_snapshot(snapshot, max_candidates=30)
-            res = self.reflex.evaluate_candidates("accept all cookies or close modal dialog", candidates)
-            if res["confidence"] > 0.65 and res["target_ref"] != "NONE":
-                best = res["ranked_candidates"][0]
-                text_lower = (best.get("name") or "").lower()
-                if any(k in text_lower for k in ["cookie", "accept", "agree", "allow", "zgadz", "akcept", "zezwól"]):
-                    await self.click_element(page, role=best["role"], name=best["name"])
-                    await page.wait_for_timeout(250)
-                    return True
+            await page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
+        except Exception:
+            pass
+        try:
+            await page.wait_for_timeout(200)
         except Exception:
             pass
 
-        return False
+    async def get_page_state(self, page: Page, max_candidates: int = 1000) -> PageState:
+        """Captures current PageState (URL, title, ARIA YAML, and parsed CandidateElement list)."""
+        snapshot_yaml = await page.aria_snapshot()
+        candidates = AriaElementParser.parse_elements(snapshot_yaml, max_candidates=max_candidates)
+        return PageState(
+            url=page.url,
+            title=await page.title(),
+            snapshot_yaml=snapshot_yaml,
+            candidates=candidates,
+        )
 
     async def auto_resolve_captcha_if_present(self, page: Page, timeout: float = 25.0) -> Dict[str, Any]:
         """
@@ -201,7 +208,18 @@ class BrowserEngine:
                 pass
 
         if locator is None and clean_name:
-            alt_roles = ["button", "link", "tab", "menuitem", "option", "checkbox", "radio", "textbox", "searchbox", "combobox"]
+            alt_roles = [
+                "button",
+                "link",
+                "tab",
+                "menuitem",
+                "option",
+                "checkbox",
+                "radio",
+                "textbox",
+                "searchbox",
+                "combobox",
+            ]
             for alt_role in alt_roles:
                 if alt_role == role:
                     continue
@@ -278,7 +296,9 @@ class BrowserEngine:
 
         if locator is None:
             try:
-                fallback_input = page.locator("input[type='search'], input[type='text'], input:not([type]), textarea").first
+                fallback_input = page.locator(
+                    "input[type='search'], input[type='text'], input:not([type]), textarea"
+                ).first
                 if await fallback_input.count() > 0:
                     locator = fallback_input
             except Exception:
@@ -345,9 +365,7 @@ class BrowserEngine:
 
         return False
 
-    async def toggle_checkbox(
-        self, page: Page, role: str, name: str, checked: bool = True, nth: int = 0
-    ) -> bool:
+    async def toggle_checkbox(self, page: Page, role: str, name: str, checked: bool = True, nth: int = 0) -> bool:
         """Checks or unchecks a checkbox, radio button, or switch."""
         locator = await self._resolve_locator(page, role=role or "checkbox", name=name, nth=nth)
         try:
@@ -418,9 +436,7 @@ class BrowserEngine:
 
         if locator is not None:
             try:
-                tag_type = await locator.evaluate(
-                    "el => (el.tagName + ':' + (el.type || '')).toLowerCase()"
-                )
+                tag_type = await locator.evaluate("el => (el.tagName + ':' + (el.type || '')).toLowerCase()")
                 if "input:file" in tag_type:
                     await locator.set_input_files(files, timeout=3000)
                     return True
@@ -479,26 +495,26 @@ class BrowserEngine:
             page.context, domain=domain, browser_type=browser_type, profile_path=profile_path
         )
 
-    async def execute_reflex_action(self, page: Page, action_plan: Dict[str, Any]) -> str:
+    async def execute(self, page: Page, command: Union[ActionCommand, Dict[str, Any]]) -> str:
         """
-        Unified dispatcher executing any action decided by ReflexCore (click, fill, fill_and_submit,
-        select, check, uncheck, hover, press, scroll, upload_file, goto).
-        Returns a concise string describing the executed action.
+        Executes an ActionCommand on the given Playwright page and stabilizes the DOM.
+        Returns a concise string describing the executed interaction.
         """
-        action_type = action_plan.get("action", "click")
-        role = action_plan.get("role", "")
-        name = action_plan.get("name", "")
-        nth = int(action_plan.get("nth", 0))
-        value = action_plan.get("value")
-        cand_url = action_plan.get("url")
+        cmd = ActionCommand.from_dict(command)
+        action_type = cmd.action
+        role = cmd.role
+        name = cmd.name
+        nth = cmd.nth
+        value = cmd.value
+        cand_url = cmd.url
 
         if action_type == "scroll":
-            direction = str(value or "down")
-            await self.scroll_page(page, direction=direction)
+            direction = str(value or cmd.direction or "down")
+            await self.scroll_page(page, direction=direction, amount=cmd.amount)
             return f"scroll('{direction}')"
 
         if action_type == "press":
-            key = str(value or "Enter")
+            key = str(value or cmd.key or "Enter")
             await self.press_key(page, key=key)
             return f"press('{key}')"
 
@@ -507,7 +523,7 @@ class BrowserEngine:
             return "hover()"
 
         if action_type == "upload_file":
-            files = action_plan.get("file_paths") or value
+            files = cmd.files or ([str(value)] if value else None)
             if files:
                 await self.upload_file(page, role=role, name=name, file_paths=files, nth=nth)
                 return f"upload_file('{files}')"
@@ -540,3 +556,7 @@ class BrowserEngine:
         else:
             await self.click_element(page, role=role, name=name)
         return "click()"
+
+    async def execute_reflex_action(self, page: Page, action_plan: Union[ActionCommand, Dict[str, Any]]) -> str:
+        """Backward-compatible alias for BrowserEngine.execute()."""
+        return await self.execute(page, action_plan)

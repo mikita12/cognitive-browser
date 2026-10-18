@@ -9,7 +9,7 @@ import os
 import re
 import time
 import urllib.request
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from playwright.async_api import Page
 
@@ -140,7 +140,7 @@ class CaptchaResolver:
             # If sitekey not in DOM yet, attempt regex on page scripts
             if not sitekey:
                 content = await page.content()
-                m = re.search(r'0x4[A-Za-z0-9_-]{18,24}', content)
+                m = re.search(r"0x4[A-Za-z0-9_-]{18,24}", content)
                 if m:
                     sitekey = m.group(0)
 
@@ -300,7 +300,8 @@ class CaptchaResolver:
         c_type = captcha_info.get("type", "turnstile")
 
         if c_type == "turnstile":
-            res = await page.evaluate("""(t) => {
+            res = await page.evaluate(
+                """(t) => {
                 let called = false;
                 if (typeof window._lastTurnstileCallback === 'function') {
                     try { window._lastTurnstileCallback(t); called = true; } catch (e) {}
@@ -315,11 +316,14 @@ class CaptchaResolver:
                     el.dispatchEvent(new Event('change', { bubbles: true }));
                 });
                 return { called, inputs: inputs.length };
-            }""", token)
+            }""",
+                token,
+            )
             return bool(res.get("called") or res.get("inputs", 0) > 0)
 
         elif "recaptcha" in c_type:
-            res = await page.evaluate("""(t) => {
+            res = await page.evaluate(
+                """(t) => {
                 const inputs = document.querySelectorAll('textarea[name="g-recaptcha-response"], input[name="g-recaptcha-response"]');
                 inputs.forEach(el => {
                     el.value = t;
@@ -339,11 +343,14 @@ class CaptchaResolver:
                     }
                 } catch(e) {}
                 return { inputs: inputs.length };
-            }""", token)
+            }""",
+                token,
+            )
             return bool(res.get("inputs", 0) > 0)
 
         elif c_type == "hcaptcha":
-            res = await page.evaluate("""(t) => {
+            res = await page.evaluate(
+                """(t) => {
                 const inputs = document.querySelectorAll('textarea[name="h-captcha-response"], [name="g-recaptcha-response"]');
                 inputs.forEach(el => {
                     el.value = t;
@@ -351,7 +358,9 @@ class CaptchaResolver:
                     el.dispatchEvent(new Event('change', { bubbles: true }));
                 });
                 return { inputs: inputs.length };
-            }""", token)
+            }""",
+                token,
+            )
             return bool(res.get("inputs", 0) > 0)
 
         return False
@@ -545,7 +554,20 @@ class CaptchaResolver:
         relevant_candidates: List[Dict[str, Any]] = []
         for c in candidates:
             c_text = f"{c.get('role', '')} {c.get('name', '')} {c.get('context', '')}".lower()
-            if any(k in c_text for k in ["turnstile", "captcha", "człowiek", "human", "security", "weryfikuj", "zabezpiecz", "cloudflare", "robot"]):
+            if any(
+                k in c_text
+                for k in [
+                    "turnstile",
+                    "captcha",
+                    "człowiek",
+                    "human",
+                    "security",
+                    "weryfikuj",
+                    "zabezpiecz",
+                    "cloudflare",
+                    "robot",
+                ]
+            ):
                 if not any(pb in c_text for pb in passive_badge_indicators):
                     relevant_candidates.append(c)
 
@@ -582,4 +604,3 @@ class CaptchaResolver:
             "latency_ms": round(latency_ms, 2),
             "matched_candidate": best_cand,
         }
-

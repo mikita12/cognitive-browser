@@ -1,81 +1,43 @@
 """
-Reflex Core: Fast local Cross-Encoder / NLI evaluation and Autonomous Action Planner on Accessibility Trees.
-Supports Multilingual Cross-Encoders (mmarco-mMiniLMv2), ModernBERT Reranker, and DeBERTa-v3 NLI models.
-Consumes 0 LLM tokens, executes in sub-30ms on GPU/MPS/CPU.
+Reflex Core: Local Cross-Encoder / NLI neural scorer and Autonomous Action Planner.
+Centralizes GPU mini-batch inference in `score_pairs()` and maps natural language intents
+to standardized `ActionCommand` contracts with 0 LLM tokens.
 """
 
 import re
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from .config import get_confidence_threshold, get_reflex_model
-
-
 from .captcha import CaptchaResolver
-from .parser import AriaElementParser
-from .payload import PayloadBinder
+from .config import get_confidence_threshold, get_reflex_model
+from .models import ActionCommand, ActionType, CandidateElement
+from .parser import AriaElementParser as AriaElementParser
+from .payload import PayloadBinder, _lexical_overlap_score
 
 
 class ReflexCore:
     """
     Discriminative Decision Engine & Autonomous Action Planner.
-    Computes match probabilities between candidate elements and natural language instructions,
-    infers the optimal DOM interaction (click, fill_and_submit, select, check, scroll, hover),
-    and detects when a page already satisfies an informational goal.
+    1. `score_pairs()`: Single centralized PyTorch GPU mini-batch inference method.
+    2. `evaluate_candidates()`: Ranks CandidateElements against an instruction and produces an ActionCommand.
+    3. `evaluate_page_satisfaction()`: Evaluates page text chunks against an informational goal.
     """
 
-    # Boilerplate links that autonomous goal navigation should never click unless explicitly asked
+    # Universal legal/navigation boilerplate links skipped during autonomous goal navigation unless explicitly requested
     NOISE_LINK_PATTERNS = (
         "polityka prywatności",
         "privacy policy",
         "regulamin",
         "terms of service",
         "terms and conditions",
-        "ustawienia",
-        "settings",
-        "pomoc",
-        "kontakt",
-        "zaloguj",
-        "log in",
-        "sign in",
-        "rejestracja konta",
-        "załóż konto",
-        "koszyk",
-        "twój koszyk",
-        "listy zakupowe",
-        "ulubione",
-        "schowek",
-        "mój proline",
-        "panel klienta",
-        "dodaj ogłoszenie",
-        "twoje konto",
-        "obserwowane",
-        "powiadomienia",
-        "czat",
-        "dla biznesu",
-        "aplikacje mobilne",
-        "pobierz aplikację",
-        "znajdź swoją paczkę",
-        "newsletter",
-        "kariera",
-        "o nas",
-        "reklama",
-        "tryb ai",
-        "wideo",
-        "wiadomości",
-        "grafika",
-        "mapy",
-        "why did this happen",
-        "learn more",
-        "email us",
-        "przejdź do treści",
-        "przejdź do głównej",
-        "przejdź do stopki",
+        "cookie policy",
         "skip to content",
+        "przejdź do treści",
+        "przejdź do stopki",
     )
 
     def __init__(self, model_name: Optional[str] = None, device: Optional[str] = None):
@@ -111,55 +73,86 @@ class ReflexCore:
         self._warmup()
 
     def _warmup(self) -> None:
+        self.score_pairs([["Submit form", "Web element: button 'Submit'"]])
+
+    def score_pairs(self, pairs: List[List[str]], batch_size: int = 64) -> List[float]:
+        """
+        Single centralized GPU inference method.
+        Takes a list of [text_a, text_b] pairs, sorts by length to minimize padding overhead,
+        evaluates in mini-batches, and returns calibrated probabilities in [0.0, 1.0].
+        """
+        if not pairs:
+            return []
+
+        indexed_pairs = list(enumerate(pairs))
+        indexed_pairs.sort(key=lambda x: len(x[1][0]) + len(x[1][1]))
+        probs_ordered = [0.0] * len(pairs)
+
         with torch.no_grad():
-            dummy = self.tokenizer(
-                [["Submit form", "Web element: button 'Submit'"]],
-                padding=True,
-                truncation=True,
-                max_length=128,
-                return_tensors="pt",
-            ).to(self.device)
-            _ = self.model(**dummy)
+            for b_start in range(0, len(indexed_pairs), batch_size):
+                b_slice = indexed_pairs[b_start : b_start + batch_size]
+                b_pairs = [item[1] for item in b_slice]
+                b_indices = [item[0] for item in b_slice]
+
+                inputs = self.tokenizer(
+                    b_pairs,
+                    padding=True,
+                    truncation=True,
+                    max_length=512,
+                    return_tensors="pt",
+                ).to(self.device)
+                logits = self.model(**inputs).logits
+
+                if self.is_reranker:
+                    squeezed = logits.squeeze(-1)
+                    if "mmarco" in self.model_name.lower():
+                        b_probs = torch.sigmoid((squeezed + 4.5) / 2.0)
+                    else:
+                        b_probs = torch.sigmoid(squeezed)
+                    if b_probs.ndim == 0:
+                        b_probs = b_probs.unsqueeze(0)
+                else:
+                    binary_logits = logits[:, [self.contra_idx, self.entail_idx]]
+                    b_probs = torch.softmax(binary_logits, dim=-1)[:, 1]
+
+                for orig_idx, prob_val in zip(b_indices, b_probs, strict=False):
+                    probs_ordered[orig_idx] = float(prob_val.item())
+
         if self.device == "cuda":
             torch.cuda.synchronize()
         elif self.device == "mps":
             torch.mps.synchronize()
 
+        return probs_ordered
+
     @classmethod
-    def is_noise_candidate(cls, candidate: Dict[str, Any], intent: str) -> bool:
-        """Returns True if the candidate is a generic footer/header/account distraction not requested by intent."""
-        name_lower = (candidate.get("name") or "").strip().lower()
-        ctx_lower = (candidate.get("context") or "").strip().lower()
+    def is_noise_candidate(cls, candidate: Union[CandidateElement, Dict[str, Any]], intent: str) -> bool:
+        """Returns True if the candidate is generic footer/legal boilerplate not requested by intent."""
+        el = CandidateElement.from_dict(candidate)
+        name_lower = el.name.lower()
         intent_lower = intent.lower()
 
         if not name_lower:
             return False
 
-        # Never click footer links unless intent mentions footer/regulamin/kontakt
-        if "contentinfo" in ctx_lower and not any(w in intent_lower for w in ["regulamin", "kontakt", "polityk", "stopk"]):
+        if el.is_footer and not any(
+            w in intent_lower for w in ("regulamin", "kontakt", "polityk", "stopk", "terms", "privacy")
+        ):
             return True
 
         for pat in cls.NOISE_LINK_PATTERNS:
             if pat in name_lower and pat not in intent_lower:
                 return True
 
-        # Avoid clicking the site logo to go back to "/"
-        url = str(candidate.get("url") or "").strip()
-        if url == "/" and "strona główna" not in intent_lower and "home" not in intent_lower:
+        if el.url == "/" and "strona główna" not in intent_lower and "home" not in intent_lower:
             return True
 
         return False
 
     @staticmethod
     def extract_fill_value(intent: str) -> Optional[str]:
-        """
-        Extracts a search query or input value from a natural language instruction/goal if present.
-        Examples:
-        - 'Wpisz w pole wyszukiwania: site:olx.pl "rtx 4070 ti" wrocław i kliknij szukaj' -> 'site:olx.pl "rtx 4070 ti" wrocław'
-        - 'Wpisz "RTX 4070 Ti" w wyszukiwarkę' -> 'RTX 4070 Ti'
-        """
+        """Extracts a search query or input value from a natural language instruction if present."""
         intent_clean = intent.strip()
-        # 1. Explicit colon pattern after wpisz/wyszukaj/type/search
         m_colon = re.search(
             r"(?:wpisz|wprowadź|wyszukaj|szukaj|type|fill|enter|search)[^:]{0,35}:\s*(.+?)(?:\s+i\s+(?:kliknij|naciśnij|wciśnij|zatwierdź)|$)",
             intent_clean,
@@ -170,7 +163,6 @@ class ReflexCore:
             if val:
                 return val
 
-        # 2. Quoted value after input or selection verb
         m_quote = re.search(
             r"(?:wpisz|wprowadź|type|fill|enter|wybierz|select|choose)\s+['\"„”]([^'\"„”]{2,80})['\"„”]",
             intent_clean,
@@ -182,80 +174,64 @@ class ReflexCore:
         return None
 
     @classmethod
+    def infer_action_command(
+        cls,
+        intent: str,
+        best_candidate: Union[CandidateElement, Dict[str, Any]],
+        explicit_fill_value: Optional[str] = None,
+        confidence: float = 1.0,
+    ) -> ActionCommand:
+        """Builds a strongly-typed ActionCommand from an instruction and the selected CandidateElement."""
+        el = CandidateElement.from_dict(best_candidate)
+        intent_lower = intent.lower()
+        fill_val = explicit_fill_value if explicit_fill_value is not None else cls.extract_fill_value(intent)
+
+        if any(w in intent_lower for w in ("przewiń", "scroll", "na dół", "w dół")):
+            direction = "up" if ("gór" in intent_lower or "up" in intent_lower) else "down"
+            return ActionCommand(
+                action="scroll", target=el, direction=direction, value=direction, confidence=confidence
+            )
+
+        wants_select = any(w in intent_lower for w in ("wybierz", "select", "choose", "z listy", "dropdown", "opcję"))
+        if el.role in ("combobox", "option") and (
+            wants_select or (fill_val and not any(w in intent_lower for w in ("wpisz", "type", "fill")))
+        ):
+            return ActionCommand(action="select", target=el, value=fill_val, confidence=confidence)
+
+        if el.is_input and fill_val:
+            wants_submit = el.role == "searchbox" or any(
+                w in intent_lower for w in ("szukaj", "wyszukaj", "search", "enter", "zatwierdź")
+            )
+            act: ActionType = "fill_and_submit" if wants_submit else "fill"
+            return ActionCommand(action=act, target=el, value=fill_val, confidence=confidence)
+
+        if el.is_boolean_control:
+            uncheck = any(w in intent_lower for w in ("odznacz", "wyłącz", "uncheck", "disable"))
+            return ActionCommand(
+                action="uncheck" if uncheck else "check",
+                target=el,
+                confidence=confidence,
+            )
+
+        if any(w in intent_lower for w in ("najedź", "hover", "rozwiń menu")):
+            return ActionCommand(action="hover", target=el, confidence=confidence)
+
+        return ActionCommand(action="click", target=el, confidence=confidence)
+
+    @classmethod
     def infer_action_plan(
         cls,
         intent: str,
-        best_candidate: Dict[str, Any],
+        best_candidate: Union[CandidateElement, Dict[str, Any]],
         explicit_fill_value: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Builds a complete executable action plan for BrowserEngine.execute_reflex_action()
-        covering fill, fill_and_submit, select, check, uncheck, hover, scroll, press, goto, or click.
-        """
-        role = (best_candidate.get("role") or "button").lower()
-        name = best_candidate.get("name") or ""
-        nth = int(best_candidate.get("nth", 0))
-        url = best_candidate.get("url")
-        intent_lower = intent.lower()
-
-        fill_val = explicit_fill_value if explicit_fill_value is not None else cls.extract_fill_value(intent)
-
-        # Scroll intent check
-        if any(w in intent_lower for w in ["przewiń", "scroll", "na dół", "w dół"]):
-            direction = "up" if ("gór" in intent_lower or "up" in intent_lower) else "down"
-            return {"action": "scroll", "role": role, "name": name, "nth": nth, "value": direction}
-
-        # Select / Dropdown option
-        wants_select = any(w in intent_lower for w in ["wybierz", "select", "choose", "z listy", "dropdown", "opcję"])
-        if role in ("combobox", "option") and (wants_select or (fill_val and not any(w in intent_lower for w in ["wpisz", "type", "fill"]))):
-            return {"action": "select", "role": role, "name": name, "nth": nth, "value": fill_val}
-
-        # Input / Searchbox fill
-        if role in ("textbox", "searchbox", "spinbutton") or (role == "combobox" and fill_val):
-            if fill_val:
-                wants_submit = (
-                    role == "searchbox"
-                    or any(w in intent_lower for w in ["szukaj", "wyszukaj", "search", "enter", "zatwierdź"])
-                )
-                return {
-                    "action": "fill_and_submit" if wants_submit else "fill",
-                    "role": role,
-                    "name": name,
-                    "nth": nth,
-                    "value": fill_val,
-                }
-
-        # Checkbox / Radio / Switch
-        if role in ("checkbox", "radio", "switch"):
-            uncheck = any(w in intent_lower for w in ["odznacz", "wyłącz", "uncheck", "disable"])
-            return {
-                "action": "uncheck" if uncheck else "check",
-                "role": role,
-                "name": name,
-                "nth": nth,
-            }
-
-        # Hover intent
-        if any(w in intent_lower for w in ["najedź", "hover", "rozwiń menu"]):
-            return {"action": "hover", "role": role, "name": name, "nth": nth}
-
-        # Direct URL navigation or click
-        return {
-            "action": "click",
-            "role": role,
-            "name": name,
-            "nth": nth,
-            "url": url,
-        }
+        """Backward-compatible wrapper returning ActionCommand as a dictionary."""
+        return cls.infer_action_command(intent, best_candidate, explicit_fill_value=explicit_fill_value).to_dict()
 
     @staticmethod
-    def is_goal_satisfied_on_page(
-        goal: str, snapshot_yaml: str, page_title: str, page_url: str
-    ) -> bool:
+    def is_goal_satisfied_on_page(goal: str, snapshot_yaml: str, page_title: str, page_url: str) -> bool:
         """
-        Determines whether the current page ALREADY contains the target data requested by `goal`
-        (e.g., search results list with prices, parcel dimensions table, or target article),
-        preventing the autonomous loop from clicking away from a page that already has the answer.
+        Universal structural check for whether the current page already satisfies an informational goal.
         """
         if not snapshot_yaml or len(snapshot_yaml) < 200:
             return False
@@ -264,74 +240,44 @@ class ReflexCore:
         goal_lower = goal.lower()
         url_lower = page_url.lower()
 
-        # 0. Block/error/captcha detection: stop immediately so we don't click random error links
+        # 1. Stop immediately on HTTP error / anti-bot block pages
         if any(
             err in snap_lower
-            for err in [
+            for err in (
                 "403 error",
                 "request blocked",
                 "unusual traffic from your computer network",
-                "captcha",
                 "access denied",
-            ]
+            )
         ):
             return True
 
-        # 1. Read-only / inspection instructions: never click anything if the user says "przeczytaj", "odczytaj", "nie klikaj"
+        # 2. Respect explicit read-only instructions
         if any(
             ro in goal_lower
-            for ro in [
+            for ro in (
                 "nie klikaj",
                 "pozostań na stronie",
                 "przeczytaj",
                 "odczytaj",
-                "treść ogłoszenia",
-                "opis ogłoszenia",
-                "zweryfikuj z treści",
-            ]
+                "do not click",
+                "stay on page",
+            )
         ):
             return True
 
-        # 2. Direct product / offer detail page (e.g. OLX /d/oferta/..., Ceneo /146875949, Allegro /oferta/...)
-        if any(
-            pat in url_lower
-            for pat in ["/d/oferta/", "/oferta/", "/produkt/", "/item/", "ceneo.pl/1"]
-        ) or re.search(r"ceneo\.pl/\d{6,}", url_lower):
-            return True
-
-        # 3. If the user explicitly asked to type into a search box on a homepage, don't stop before typing
-        if any(w in goal_lower for w in ["wpisz w pole", "wpisz ", "type in"]) and not any(
-            q in url_lower for q in ["?q=", "&q=", "?qh=", "szukaj", "search", "filter"]
-        ):
-            return False
-
-        # 2. Check if URL is already a search/listing/filter results page or specific product/pricing page
-        is_results_url = any(
-            pat in url_lower
-            for pat in ["?q=", "&q=", "?qh=", "szukaj", "search", "string=", "cennik", "szybkienadania", "kategoria"]
+        # 3. Generic listing check: if goal seeks prices/offers/dimensions and page already displays multiple data points
+        price_matches = len(re.findall(r"\b\d[\d\s.,]{0,6}\s*(?:zł|pln|eur|usd|\$|€)\b", snap_lower))
+        unit_matches = len(re.findall(r"\b\d+\s*(?:mm|cm|kg|gb|tb|mhz)\b", snap_lower))
+        seeks_data = any(
+            w in goal_lower
+            for w in ("cen", "ofert", "znajdź", "sprawdź", "porównaj", "wymiar", "gabaryt", "price", "offer", "find")
         )
-
-        # Count price occurrences (e.g. "2 850 zł", "16.49 zł", "3999,00 zł", "PLN")
-        price_matches = len(re.findall(r"\b\d[\d\s.,]{0,6}\s*(?:zł|pln|eur|usd)\b", snap_lower))
-        # Count dimension occurrences (e.g. "mm", "cm", "kg", "gabaryt")
-        dim_matches = len(re.findall(r"\b(?:gabaryt|rozmiar:\s*(?:mała|średnia|duża)|\d+\s*x\s*\d+|\d+\s*kg)\b", snap_lower))
-
-        wants_prices_or_offers = any(
-            w in goal_lower for w in ["cen", "ofert", "znajdź", "sprawdź", "porównaj", "odczytaj", "pokaż", "zobacz", "wymiar", "gabaryt"]
-        )
-
-        # If goal asks for prices/offers and the current page already lists >= 3 prices!
-        if wants_prices_or_offers and price_matches >= 3:
+        if seeks_data and (price_matches >= 3 or (unit_matches >= 2 and price_matches >= 1)):
             return True
 
-        # If goal asks for dimensions/gabaryty and the current page already lists dimensions/prices
-        if any(w in goal_lower for w in ["gabaryt", "wymiar", "paczkomat", "inpost"]) and (
-            dim_matches >= 1 or price_matches >= 1
-        ):
-            return True
-
-        # If we navigated directly via query URL (like x-kom.pl/szukaj?q=...) and the page has substantial content
-        if is_results_url and wants_prices_or_offers and len(snapshot_yaml) > 1200:
+        is_search_url = any(p in url_lower for p in ("szukaj", "search", "?q=", "&q="))
+        if is_search_url and seeks_data and len(snapshot_yaml) > 1200:
             return True
 
         return False
@@ -345,28 +291,16 @@ class ReflexCore:
         max_chunks: int = 16,
     ) -> Dict[str, Any]:
         """
-        Evaluates the current page state on GPU using the Cross-Encoder to compute:
-        1. `goal_satisfaction_rate` (0.0 - 1.0): probability that the current page ALREADY satisfies `goal`.
-        2. `is_satisfied` (bool): whether the router should allocate state to STAY_ON_PAGE instead of clicking further.
-        3. `ranked_chunks`: page content sections ranked by GPU relevance to `goal` (so deep sections like OLX 'OPIS' at line 380 are never lost to truncation).
+        Evaluates page content sections in parallel on GPU via `score_pairs()` to determine
+        whether the current page already satisfies `goal` and ranks the most relevant sections.
         """
         t0 = time.perf_counter()
         structural_hit = self.is_goal_satisfied_on_page(goal, snapshot_yaml, page_title, page_url)
 
-        # Filter decorative noise lines first
         clean_lines = [
             line
             for line in snapshot_yaml.splitlines()
-            if line.strip()
-            and line.strip()
-            not in (
-                "- img",
-                "- separator",
-                "- img:",
-                '- text: ""',
-                "- group",
-                '- button "Wyczyść"',
-            )
+            if line.strip() and line.strip() not in ("- img", "- separator", "- img:", '- text: ""', "- group")
         ]
 
         if not clean_lines:
@@ -374,79 +308,45 @@ class ReflexCore:
                 "goal_satisfaction_rate": 0.0,
                 "is_satisfied": False,
                 "latency_ms": 0.0,
-                "best_chunks": [],
+                "ranked_chunks": [],
             }
 
-        # Group lines into semantic windows of ~25 lines
-        chunk_size = 25
+        window_size = 25
+        stride = 20
         chunks: List[Dict[str, Any]] = []
-        for idx in range(0, len(clean_lines), chunk_size):
-            window = clean_lines[idx : idx + chunk_size]
+        for idx, start in enumerate(range(0, len(clean_lines), stride)):
+            if len(chunks) >= max_chunks:
+                break
+            window = clean_lines[start : start + window_size]
             text_block = "\n".join(window)
             chunks.append(
                 {
-                    "chunk_index": len(chunks),
-                    "start_line": idx,
+                    "chunk_index": idx,
+                    "start_line": start,
+                    "text": text_block[:900],
                     "lines": window,
-                    "text": text_block,
                 }
             )
-            if len(chunks) >= max_chunks:
-                break
 
-        pairs = [
-            [goal, f"Page '{page_title}' content section:\n{c['text'][:700]}"]
-            for c in chunks
-        ]
-
-        with torch.no_grad():
-            inputs = self.tokenizer(
-                pairs, padding=True, truncation=True, max_length=384, return_tensors="pt"
-            ).to(self.device)
-            outputs = self.model(**inputs)
-            logits = outputs.logits
-
+        pairs: List[List[str]] = []
+        for c in chunks:
+            doc = f"Page '{page_title}': {c['text']}"
             if self.is_reranker:
-                squeezed = logits.squeeze(-1)
-                if "mmarco" in self.model_name.lower():
-                    probs = torch.sigmoid((squeezed + 4.5) / 2.0)
-                else:
-                    probs = torch.sigmoid(squeezed)
-                if probs.ndim == 0:
-                    probs = probs.unsqueeze(0)
+                pairs.append([goal, doc])
             else:
-                binary_logits = logits[:, [self.contra_idx, self.entail_idx]]
-                probs = torch.softmax(binary_logits, dim=-1)[:, 1]
+                pairs.append([doc, f"This page section answers or satisfies: {goal}."])
 
-        if self.device == "cuda":
-            torch.cuda.synchronize()
-
+        probs = self.score_pairs(pairs)
         latency_ms = round((time.perf_counter() - t0) * 1000, 2)
 
         for i, c in enumerate(chunks):
-            score = float(probs[i].item())
-            # Boost chunks that contain offer descriptions only if baseline neural relevance is present (>0.35)
-            txt_low = c["text"].lower()
-            if score > 0.35 and any(k in txt_low for k in ["heading \"opis\"", "gwarancj", "faktur", "paragon", "gabaryt"]):
-                score = min(1.0, score + 0.15)
-            c["score"] = round(score, 4)
+            c["score"] = round(probs[i], 4)
 
-        ranked_chunks = sorted(chunks, key=lambda x: x["score"], reverse=True)
-        top_neural_score = float(ranked_chunks[0]["score"]) if ranked_chunks else 0.0
+        ranked_chunks = sorted(chunks, key=lambda x: float(x["score"]), reverse=True)
+        top_neural = float(ranked_chunks[0]["score"]) if ranked_chunks else 0.0
 
-        # Combine neural chunk satisfaction with structural page satisfaction
-        if structural_hit:
-            satisfaction_rate = round(max(0.85, top_neural_score), 4)
-            is_satisfied = True
-        else:
-            total_nav_links = sum(1 for ln in clean_lines if ln.strip().startswith(("- link", "- button")))
-            paragraph_lines = sum(1 for ln in clean_lines if ln.strip().startswith(("- paragraph:", "- text:", "- code")))
-
-            # Navigation portal discount: high ratio of menu links with very few content paragraphs
-            is_navigation_portal = total_nav_links >= 6 and paragraph_lines < 3
-            density_factor = 0.65 if is_navigation_portal else 1.0
-            satisfaction_rate = round(top_neural_score * density_factor, 4)
-            is_satisfied = satisfaction_rate >= 0.78 and top_neural_score >= 0.70
+        satisfaction_rate = round(max(top_neural, 0.82 if structural_hit else 0.0), 4)
+        is_satisfied = structural_hit or (satisfaction_rate >= 0.72)
 
         return {
             "goal_satisfaction_rate": satisfaction_rate,
@@ -462,10 +362,7 @@ class ReflexCore:
         page_url: str = "",
         snapshot_yaml: str = "",
     ) -> Dict[str, Any]:
-        """
-        Evaluates the probability and type of CAPTCHA, Turnstile, or security challenge on the page.
-        Delegates to CaptchaResolver.evaluate_presence with self as neural evaluator.
-        """
+        """Delegates CAPTCHA presence evaluation to CaptchaResolver."""
         return CaptchaResolver.evaluate_presence(
             candidates=candidates,
             page_title=page_title,
@@ -474,12 +371,57 @@ class ReflexCore:
             evaluator=self,
         )
 
+    @staticmethod
+    def _compute_role_and_lexical_adjustment(intent: str, el: CandidateElement) -> float:
+        """
+        Computes lightweight structural role compatibility and normalized lexical stem overlap.
+        """
+        intent_lower = intent.lower()
+        boost = 0.0
+
+        wants_select = any(
+            w in intent_lower for w in ("z listy", "dropdown", "select from", "combobox", "opcję z", "wybierz z")
+        )
+        wants_input = (
+            any(
+                w in intent_lower
+                for w in ("pole", "wpisz", "tekst", "textbox", "input", "wyszukiwark", "searchbox", "fill", "type")
+            )
+            and not wants_select
+        )
+        wants_click = (
+            any(w in intent_lower for w in ("kliknij", "otwórz", "przejdź", "naciśnij", "click", "open"))
+            and not wants_select
+            and not wants_input
+        )
+
+        if wants_select:
+            boost += 0.30 if el.role in ("combobox", "option") else -0.25
+        elif wants_input:
+            boost += 0.25 if el.is_input else -0.30
+        elif wants_click:
+            if el.is_input:
+                boost -= 0.35
+            elif el.role in ("button", "link", "tab", "menuitem"):
+                boost += 0.12
+
+        lex_overlap = _lexical_overlap_score(intent, f"{el.name} {el.context}")
+        if lex_overlap > 0:
+            boost += min(0.28, lex_overlap * 0.6)
+        else:
+            boost -= 0.12
+
+        return boost
+
     def evaluate_candidates(
-        self, intent: str, candidates: List[Dict[str, Any]], confidence_threshold: Optional[float] = None
+        self,
+        intent: str,
+        candidates: Sequence[Union[CandidateElement, Dict[str, Any]]],
+        confidence_threshold: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
-        Evaluates candidate elements in parallel using Cross-Encoder / NLI on GPU.
-        Returns the top matching element, recommended action plan, and confidence score.
+        Evaluates candidate elements in parallel on GPU via `score_pairs()`.
+        Returns the top matching element, standardized ActionCommand plan, and confidence score.
         """
         if confidence_threshold is None:
             confidence_threshold = get_confidence_threshold()
@@ -487,206 +429,52 @@ class ReflexCore:
         if not candidates:
             return {
                 "target_ref": "NONE",
-                "tool_action": "escalate",
+                "tool_action": "none",
+                "action_plan": None,
                 "confidence": 0.0,
                 "should_escalate": True,
+                "ambiguity_detected": False,
+                "ambiguity_margin": None,
                 "latency_ms": 0.0,
                 "ranked_candidates": [],
             }
 
         start_time = time.perf_counter()
+        elements = [CandidateElement.from_dict(c) for c in candidates]
 
-        pairs = []
-        for c in candidates:
-            parts = [f"role: {c.get('role')}"]
-            if c.get("name"):
-                parts.append(f"name: '{c['name']}'")
-            if c.get("text") and c.get("text") != c.get("name"):
-                parts.append(f"text: '{c['text']}'")
-            if c.get("context"):
-                parts.append(f"section: ({c['context']})")
-            if c.get("url"):
-                parts.append(f"url: '{c['url']}'")
-
-            elem_desc = f"Interactive web element: {', '.join(parts)}."
+        pairs: List[List[str]] = []
+        for el in elements:
+            elem_desc = el.format_for_model()
             if self.is_reranker:
                 pairs.append([intent, elem_desc])
             else:
-                hypothesis = f"This element represents, opens, or is used to {intent}."
-                pairs.append([elem_desc, hypothesis])
+                pairs.append([elem_desc, f"This element represents, opens, or is used to {intent}."])
 
-        indexed_pairs = list(enumerate(pairs))
-        # Sort pairs by total character length to minimize padding tokens within each GPU mini-batch
-        indexed_pairs.sort(key=lambda x: len(x[1][0]) + len(x[1][1]))
-
-        batch_size = 64
-        raw_probs_ordered = [0.0] * len(pairs)
-
-        with torch.no_grad():
-            for b_start in range(0, len(indexed_pairs), batch_size):
-                b_slice = indexed_pairs[b_start : b_start + batch_size]
-                b_pairs = [item[1] for item in b_slice]
-                b_indices = [item[0] for item in b_slice]
-
-                inputs = self.tokenizer(
-                    b_pairs, padding=True, truncation=True, max_length=512, return_tensors="pt"
-                ).to(self.device)
-                outputs = self.model(**inputs)
-                logits = outputs.logits
-
-                if self.is_reranker:
-                    squeezed = logits.squeeze(-1)
-                    if "mmarco" in self.model_name.lower():
-                        b_probs = torch.sigmoid((squeezed + 4.5) / 2.0)
-                    else:
-                        b_probs = torch.sigmoid(squeezed)
-                    if b_probs.ndim == 0:
-                        b_probs = b_probs.unsqueeze(0)
-                else:
-                    binary_logits = logits[:, [self.contra_idx, self.entail_idx]]
-                    b_probs = torch.softmax(binary_logits, dim=-1)[:, 1]
-
-                for orig_idx, prob_val in zip(b_indices, b_probs, strict=False):
-                    raw_probs_ordered[orig_idx] = float(prob_val.item())
-
-        if self.device == "cuda":
-            torch.cuda.synchronize()
-
+        raw_probs = self.score_pairs(pairs)
         latency_ms = (time.perf_counter() - start_time) * 1000
 
-        def _compute_lexical_boost(intent_str: str, cand_role: str, cand_name: str, cand_ctx: str) -> float:
-            intent_lower = intent_str.lower()
-            name_lower = f"{cand_name or ''} {cand_ctx or ''}".lower()
-            role_lower = (cand_role or "").lower()
-
-            boost = 0.0
-
-            # 1. Action type & role matching
-            wants_select = any(
-                w in intent_lower
-                for w in ["z listy", "dropdown", "select from", "combobox", "opcję z", "wybierz z", "z listy miasto", "z listy kraj"]
-            )
-            wants_input = any(
-                w in intent_lower
-                for w in ["pole", "wpisz", "tekst", "textbox", "input", "wyszukiwark", "searchbox", "fill", "type"]
-            ) and not wants_select
-            wants_click = any(
-                w in intent_lower
-                for w in ["kliknij", "otwórz", "przejdź", "naciśnij", "click", "open"]
-            ) and not wants_select and not wants_input
-            wants_button = any(w in intent_lower for w in ["przycisk", "guzik", "button", "btn", "submit"])
-            wants_link = any(w in intent_lower for w in ["link", "odnośnik", "href"])
-
-            if wants_select:
-                if role_lower in ["combobox", "option"]:
-                    boost += 0.35
-                else:
-                    boost -= 0.30
-            elif wants_input:
-                if role_lower in ["textbox", "searchbox", "combobox", "spinbutton"]:
-                    boost += 0.25
-                else:
-                    boost -= 0.35
-            elif wants_click:
-                if role_lower in ["textbox", "searchbox", "combobox"]:
-                    boost -= 0.40
-                elif role_lower in ["button", "link", "tab", "menuitem"]:
-                    boost += 0.15
-
-            if wants_button:
-                if role_lower == "button":
-                    boost += 0.15
-                else:
-                    boost -= 0.20
-            elif wants_link:
-                if role_lower == "link":
-                    boost += 0.15
-                else:
-                    boost -= 0.20
-
-            # 2. Token / stem matching between intent and element name + section context
-            intent_words = set(re.findall(r"\w{3,}", intent_lower))
-            name_words = set(re.findall(r"\w{3,}", name_lower))
-
-            stop_words = {
-                "lub",
-                "oraz",
-                "dla",
-                "sie",
-                "się",
-                "jest",
-                "albo",
-                "przez",
-                "jego",
-                "pod",
-                "nad",
-                "the",
-                "and",
-                "for",
-                "with",
-                "kliknij",
-                "otwórz",
-                "przejdź",
-                "wpisz",
-                "znajdź",
-                "sprawdź",
-                "zobacz",
-                "pokaż",
-                "heading",
-                "main",
-                "listitem",
-                "region",
-                "navigation",
-            }
-            meaningful_intent = {w for w in intent_words if w not in stop_words}
-            meaningful_name = {w for w in name_words if w not in stop_words}
-
-            def check_stems(w1: str, w2: str) -> bool:
-                min_len = min(len(w1), len(w2))
-                if min_len >= 4:
-                    return w1[:4] == w2[:4] or (w1[: min_len - 1] == w2[: min_len - 1])
-                return w1 in w2 or w2 in w1
-
-            exact_matches = sum(1 for iw in meaningful_intent if iw in meaningful_name)
-            stem_matches = sum(
-                1
-                for iw in meaningful_intent
-                if iw not in meaningful_name and any(check_stems(iw, nw) for nw in meaningful_name)
-            )
-
-            if exact_matches > 0:
-                boost += min(0.28, exact_matches * 0.14)
-            elif stem_matches > 0:
-                boost += min(0.18, stem_matches * 0.09)
-            elif len(meaningful_intent) > 0:
-                boost -= 0.16
-
-            return boost
-
         scored_candidates: List[Dict[str, Any]] = []
-        for i, c in enumerate(candidates):
-            raw_score = raw_probs_ordered[i]
-            boost = _compute_lexical_boost(
-                intent, c.get("role") or "", c.get("name") or "", c.get("context") or ""
-            )
-            # Calibration: dampen positive boost if neural model considers element irrelevant (<0.25)
-            # to eliminate False Positives on adversarial or impossible goals
+        for i, el in enumerate(elements):
+            raw_score = raw_probs[i]
+            boost = self._compute_role_and_lexical_adjustment(intent, el)
+
+            # Dampen positive lexical boost if neural model scores the element as irrelevant (<0.25)
             if boost > 0 and raw_score < 0.25:
                 boost = boost * (raw_score / 0.25)
             elif boost < 0 and raw_score < 0.25:
                 boost = boost * 1.25
 
-            unclamped_score = raw_score + boost
+            unclamped = raw_score + boost
             scored_candidates.append(
                 {
-                    "ref": c.get("ref", "NONE"),
-                    "role": c.get("role"),
-                    "name": c.get("name"),
-                    "context": c.get("context", ""),
-                    "nth": c.get("nth", 0),
-                    "url": c.get("url"),
-                    "_sort_score": unclamped_score,
-                    "confidence_score": float(round(max(0.0, min(1.0, unclamped_score)), 4)),
+                    "ref": el.ref,
+                    "role": el.role,
+                    "name": el.name,
+                    "context": el.context,
+                    "nth": el.nth,
+                    "url": el.url,
+                    "_sort_score": unclamped,
+                    "confidence_score": float(round(max(0.0, min(1.0, unclamped)), 4)),
                 }
             )
 
@@ -703,23 +491,21 @@ class ReflexCore:
             second_score = float(second["confidence_score"])
             score_diff = best_score - second_score
 
-            is_distinct = (
-                (best.get("role") or "").lower() != (second.get("role") or "").lower()
-                or (best.get("name") or "").strip().lower() != (second.get("name") or "").strip().lower()
-            )
-            # Ambiguity Margin: if top two distinct candidates are within 0.04 and confidence < 0.75, escalate
+            is_distinct = (best.get("role") or "").lower() != (second.get("role") or "").lower() or (
+                best.get("name") or ""
+            ).strip().lower() != (second.get("name") or "").strip().lower()
             if is_distinct and score_diff < 0.04 and best_score < 0.75:
                 ambiguity_detected = True
                 should_escalate = True
 
         target_ref = str(best["ref"]) if not should_escalate else "NONE"
-
-        action_plan = self.infer_action_plan(intent, best)
+        command = self.infer_action_command(intent, best, confidence=best_score)
 
         return {
             "target_ref": target_ref,
-            "tool_action": action_plan["action"],
-            "action_plan": action_plan,
+            "tool_action": command.action,
+            "action_plan": command.to_dict(),
+            "command": command,
             "confidence": best_score,
             "should_escalate": should_escalate,
             "ambiguity_detected": ambiguity_detected,
@@ -731,11 +517,8 @@ class ReflexCore:
     def bind_payload_to_elements(
         self,
         payload: Dict[str, Any],
-        candidates: List[Dict[str, Any]],
-        min_confidence: float = 0.30,
+        candidates: Sequence[Union[CandidateElement, Dict[str, Any]]],
+        min_confidence: float = 0.20,
     ) -> List[Dict[str, Any]]:
-        """
-        Universal neural semantic bipartite matching between arbitrary user payload and form elements.
-        Delegates to PayloadBinder engine.
-        """
+        """Delegates form payload binding to PayloadBinder."""
         return PayloadBinder(self).bind(payload, candidates, min_confidence=min_confidence)
