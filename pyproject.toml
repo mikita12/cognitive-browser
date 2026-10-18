@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cognitive-browser"
 version = "0.2.0"
-description = "Autonomous browser agent & MCP server powered by Reflex Core (DeBERTa-v3 NLI) routing with Cortex Engine LLM escalation"
+description = "Zero-token autonomous browser agent & MCP server powered by pluggable local GPU Cross-Encoder / NLI routing (mmarco-mMiniLMv2, ModernBERT, DeBERTa-v3, BGE), universal form payload binding, and RouteCache"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -15,6 +15,8 @@ authors = [
 keywords = [
     "browser-agent",
     "mcp",
+    "cross-encoder",
+    "modernbert",
     "deberta",
     "playwright",
     "nli",
