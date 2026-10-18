@@ -102,9 +102,9 @@ flowchart TD
   - Enables instant direct jumps to target URLs or interactive elements for routine queries, dropping latency to <15ms.
 
 ### 3.5 [`cognitive_browser.reflex.ReflexCore`](../cognitive_browser/reflex.py)
-- **Role:** High-speed semantic decision core powered by local HuggingFace Cross-Encoder models (`mmarco-mMiniLMv2-L12-H384-v1` or `nli-deberta-v3-small`).
+- **Role:** Model-agnostic semantic decision core supporting Cross-Encoder Rerankers (`num_labels = 1`, e.g., `mmarco-mMiniLMv2-L12-H384-v1`, `ms-marco-MiniLM-L-6-v2`, `bge-reranker-v2-m3`), NLI Entailment models (`num_labels = 3`, e.g., `ModernBERT-base-nli`, `mDeBERTa-v3-base-mnli-xnli`), and 0-VRAM Remote Reranker APIs (`api:jina-reranker-v2-base-multilingual` via `/v1/rerank`).
 - **Key Capabilities:**
-  - Single centralized GPU mini-batch inference method (`score_pairs()`) with length-sorted batching.
+  - Single centralized GPU/CPU/API mini-batch inference method (`score_pairs()`) with length-sorted batching and multi-query API grouping (`_score_pairs_api()`).
   - Page goal satisfaction scoring: breaks long page text into sliding semantic chunks and scores content match.
   - State vs Action Competition: If page satisfaction rate exceeds action candidate confidence, the agent stops navigating and extracts the content immediately.
   - Calibration: Calibrated confidence threshold (0.35 - 0.55) to trigger Agent-in-the-Loop escalation when ambiguous.
