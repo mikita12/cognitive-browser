@@ -107,10 +107,7 @@ def test_remote_reranker_api_mode_zero_vram(monkeypatch):
             results.append({"index": idx, "relevance_score": score})
 
         resp_bytes = json.dumps({"results": results}).encode("utf-8")
-        mock_resp = io.BytesIO(resp_bytes)
-        mock_resp.__enter__ = lambda s: s  # type: ignore[attr-defined]
-        mock_resp.__exit__ = lambda s, *args: None  # type: ignore[attr-defined]
-        return mock_resp
+        return io.BytesIO(resp_bytes)
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
