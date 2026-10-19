@@ -207,7 +207,17 @@ class ReflexCore:
         intent_lower = intent.lower()
 
         if not name_lower:
-            return False
+            return el.role in ("link", "button")
+
+        # Footnote / citation check: e.g. [1], [2], 1, 2 for role "link"
+        clean_name = el.name.strip()
+        if el.role == "link" and (re.match(r"^\[\d+\]$", clean_name) or re.match(r"^\d+$", clean_name)):
+            wants_citation = any(
+                w in intent_lower
+                for w in ("przypis", "bibliograf", "źródł", "zrodl", "citation", "reference", "footnote")
+            )
+            if not wants_citation:
+                return True
 
         if el.is_footer and not any(
             w in intent_lower for w in ("regulamin", "kontakt", "polityk", "stopk", "terms", "privacy")
@@ -314,14 +324,101 @@ class ReflexCore:
         return cls.infer_action_command(intent, best_candidate, explicit_fill_value=explicit_fill_value).to_dict()
 
     @staticmethod
+    def extract_specific_goal_phrases(goal: str) -> List[str]:
+        """
+        Extracts content-specific phrases and keywords from a navigation goal,
+        excluding generic navigation actions, structural web terms, numbers, and stopwords.
+        """
+        if not goal:
+            return []
+        
+        # 1. Quoted terms are explicit user targets
+        quotes = [q.strip().lower() for q in re.findall(r"['\"]([^'\"]{2,})['\"]", goal) if q.strip()]
+
+        # 2. General navigation/action stopwords across PL, EN, DE
+        stopwords = {
+            # Polish
+            "sprawdź", "sprawdz", "znajdź", "znajdz", "wejdź", "wejdz", "przejdź", "przejdz",
+            "otwórz", "otworz", "zobacz", "pokaż", "pokaz", "wyszukaj", "kliknij", "klikaj",
+            "wpisz", "znalezienie", "przejscie", "wejscie", "otwarcie", "odczytaj", "szukaj",
+            "podaj", "ustal", "wybierz", "przejrzyj", "porównaj", "porownaj", "znajdowanie",
+            "strona", "stronie", "stronę", "strony", "witryna", "witrynie", "witrynę", "witryny",
+            "portal", "portalu", "serwis", "serwisie", "sekcja", "sekcji", "sekcję", "zakładka",
+            "zakładce", "zakładkę", "artykuł", "artykule", "podstrona", "podstronie", "menu",
+            "link", "odnośnik", "odnosnik", "indeks", "tabela", "karta", "karcie", "oficjalna",
+            "oficjalnej", "informacja", "informacje", "dane", "danymi", "pomoc", "kontakt",
+            "dokumentacja", "dokumentacji", "dokumentację", "dokumentacje",
+            "oraz", "żeby", "zeby", "kiedy", "gdzie", "który", "ktory", "która", "ktora",
+            "które", "ktore", "tylko", "przez", "jako", "także", "takze", "jego", "jej",
+            "tego", "przed", "poza", "może", "moze", "dla", "przy", "cena", "ceny", "cenie",
+            "cen", "oferta", "oferty", "ofert", "wyniki", "wynik", "aktualnie", "podawaną", "podawana",
+            # English
+            "check", "find", "open", "navigate", "search", "click", "look", "view", "read",
+            "type", "enter", "select", "choose", "locate", "compare", "browse",
+            "page", "pages", "website", "site", "webpage", "portal", "section", "tab",
+            "article", "documentation", "docs", "help", "contact", "home", "homepage",
+            "official", "main", "info", "information", "data", "table", "details",
+            "that", "this", "these", "those", "from", "with", "into", "onto", "about",
+            "which", "where", "when", "what", "then", "than", "there", "their", "your",
+            "under", "after", "before", "over", "price", "prices", "offer", "offers",
+            # German
+            "öffnen", "offnen", "suchen", "finden", "klicken", "eingeben", "nachschlagen",
+            "einsehen", "navigieren", "auswählen", "auswahlen", "prüfen", "prufen",
+            "seite", "startseite", "webseite", "website", "portal", "rubrik", "abschnitt",
+            "bereich", "dokumentation", "hilfe", "kontakt", "artikel", "lexikon", "offizielle",
+            "information", "informationen", "daten", "tabelle", "preis", "preise", "angebot",
+            "über", "uber", "durch", "oder", "wenn", "aber", "nach", "eine", "einer", "einem",
+            "einen", "dieser", "dieses", "diese", "unter", "aktuell", "aktuelle"
+        }
+
+        words = re.findall(r"\b[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻäöüßÄÖÜ]{3,}\b", goal.lower())
+        content_words = [w for w in words if w not in stopwords and not w.isdigit()]
+
+        res = list(quotes)
+        for w in content_words:
+            if w not in res:
+                res.append(w)
+        return res
+
+    @classmethod
+    def has_specific_goal_match(cls, goal: str, text: str) -> bool:
+        """
+        Verifies whether specific goal phrases or keywords (excluding generic numbers and stopwords)
+        are present in the text, using prefix-stemming to handle inflections across languages.
+        Requires matching at least min(2, len(specific)) stems when multiple specific terms exist.
+        """
+        specific = cls.extract_specific_goal_phrases(goal)
+        if not specific:
+            return True
+        text_lower = text.lower()
+
+        matched_stems = 0
+        for term in specific:
+            if len(term) >= 6 and " " not in term:
+                stem = term[:-2]
+            else:
+                stem = term
+            if stem in text_lower:
+                matched_stems += 1
+
+        required_matches = min(2, len(specific))
+        return matched_stems >= required_matches
+
+    @staticmethod
     def is_goal_satisfied_on_page(goal: str, snapshot_yaml: str, page_title: str, page_url: str) -> bool:
         """
         Universal structural check for whether the current page already satisfies an informational goal.
+        Requires presence of specific goal phrases/terms at the very start, preventing false positives
+        from generic numbers or boilerplate content.
         """
         if not snapshot_yaml or len(snapshot_yaml) < 200:
             return False
 
         snap_lower = snapshot_yaml.lower()
+        title_lower = page_title.lower() if page_title else ""
+        if not ReflexCore.has_specific_goal_match(goal, snap_lower + " " + title_lower):
+            return False
+
         goal_lower = goal.lower()
         url_lower = page_url.lower()
 
@@ -351,12 +448,13 @@ class ReflexCore:
         ):
             return True
 
-        # 3. Generic listing check: if goal seeks prices/offers/dimensions and page already displays multiple data points
+        # 3. Listing check: if goal seeks prices/offers/dimensions and page displays multiple data points
+        # Specific match is already verified at function entry.
         price_matches = len(re.findall(r"\b\d[\d\s.,]{0,6}\s*(?:zł|pln|eur|usd|\$|€)\b", snap_lower))
         unit_matches = len(re.findall(r"\b\d+\s*(?:mm|cm|kg|gb|tb|mhz)\b", snap_lower))
         seeks_data = any(
             w in goal_lower
-            for w in ("cen", "ofert", "znajdź", "sprawdź", "porównaj", "wymiar", "gabaryt", "price", "offer", "find")
+            for w in ("cen", "ofert", "wymiar", "gabaryt", "price", "offer")
         )
         if seeks_data and (price_matches >= 3 or (unit_matches >= 2 and price_matches >= 1)):
             return True
@@ -378,9 +476,11 @@ class ReflexCore:
         """
         Evaluates page content sections in parallel on GPU via `score_pairs()` to determine
         whether the current page already satisfies `goal` and ranks the most relevant sections.
+        Requires presence of specific goal phrases to prevent premature satisfaction on generic data.
         """
         t0 = time.perf_counter()
         structural_hit = self.is_goal_satisfied_on_page(goal, snapshot_yaml, page_title, page_url)
+        specific_match = self.has_specific_goal_match(goal, snapshot_yaml + " " + page_title)
 
         clean_lines = [
             line
@@ -432,8 +532,13 @@ class ReflexCore:
         ranked_chunks = sorted(chunks, key=lambda x: float(x["score"]), reverse=True)
         top_neural = float(ranked_chunks[0]["score"]) if ranked_chunks else 0.0
 
-        satisfaction_rate = round(max(top_neural, 0.82 if structural_hit else 0.0), 4)
-        is_satisfied = structural_hit or (satisfaction_rate >= 0.72)
+        if not specific_match:
+            # Without specific goal phrase/keyword matches, do not declare satisfaction on generic words/numbers
+            satisfaction_rate = round(min(top_neural, 0.40), 4)
+            is_satisfied = False
+        else:
+            satisfaction_rate = round(max(top_neural, 0.82 if structural_hit else 0.0), 4)
+            is_satisfied = structural_hit or (satisfaction_rate >= 0.72)
 
         return {
             "goal_satisfaction_rate": satisfaction_rate,
@@ -491,6 +596,16 @@ class ReflexCore:
                 boost -= 0.35
             elif el.role in ("button", "link", "tab", "menuitem"):
                 boost += 0.12
+
+        # Penalize footnote / citation links (e.g. [1], [2], 1, 2) unless intent seeks citations
+        clean_name = el.name.strip()
+        if el.role == "link" and (re.match(r"^\[\d+\]$", clean_name) or re.match(r"^\d+$", clean_name)):
+            wants_citation = any(
+                w in intent_lower
+                for w in ("przypis", "bibliograf", "źródł", "zrodl", "citation", "reference", "footnote")
+            )
+            if not wants_citation:
+                boost -= 0.60
 
         lex_overlap = _lexical_overlap_score(intent, f"{el.name} {el.context}")
         if lex_overlap > 0:

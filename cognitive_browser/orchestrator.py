@@ -444,6 +444,8 @@ class BrowserOrchestrator:
             did_fill_search = False
             last_satisfaction_rate = 0.0
             last_ranked_chunks: Optional[List[Dict[str, Any]]] = None
+            last_ranked_candidates: List[Dict[str, Any]] = []
+            stop_reason: Optional[str] = None
 
             for hop in range(1, 6):
                 snapshot_yaml = await page.aria_snapshot()
@@ -459,12 +461,14 @@ class BrowserOrchestrator:
                         last_satisfaction_rate = float(sat_res.get("goal_satisfaction_rate", 0.0))
                         last_ranked_chunks = sat_res.get("ranked_chunks")
                         if sat_res.get("is_satisfied") and not (extracted_query and not did_fill_search):
+                            stop_reason = f"satisfaction_met (rate={last_satisfaction_rate:.3f})"
                             break
 
                 if not (extracted_query and not did_fill_search) and ReflexCore.is_goal_satisfied_on_page(
                     goal, snapshot_yaml, current_title, str(page.url)
                 ):
                     last_satisfaction_rate = max(last_satisfaction_rate, 0.90)
+                    stop_reason = f"goal_satisfied_on_page (rate={last_satisfaction_rate:.3f})"
                     break
 
                 all_cands = AriaElementParser.parse_snapshot(snapshot_yaml, max_candidates=400)
@@ -490,6 +494,7 @@ class BrowserOrchestrator:
                     )
                 ]
                 if not avail:
+                    stop_reason = "no_available_candidates"
                     break
 
                 if extracted_query and not did_fill_search:
@@ -500,13 +505,16 @@ class BrowserOrchestrator:
                 decision = self.reflex.evaluate_candidates(intent=goal, candidates=avail)
                 total_reflex_gpu_ms += decision.get("latency_ms", 0.0)
                 confidence = float(decision.get("confidence", 0.0))
+                last_ranked_candidates = decision.get("ranked_candidates", [])
 
                 if last_satisfaction_rate >= 0.65 and last_satisfaction_rate > confidence + 0.05:
+                    stop_reason = f"satisfaction_higher_than_confidence (sat={last_satisfaction_rate:.3f}, conf={confidence:.3f})"
                     break
 
                 if confidence < MIN_GOAL_CONFIDENCE and not (
                     extracted_query and not did_fill_search and avail[0]["role"] in ("searchbox", "textbox")
                 ):
+                    stop_reason = f"confidence_below_threshold (conf={confidence:.3f} < {MIN_GOAL_CONFIDENCE})"
                     break
 
                 best = decision["ranked_candidates"][0]
@@ -536,6 +544,8 @@ class BrowserOrchestrator:
                             "goal_satisfaction_before_step": last_satisfaction_rate,
                             "latency_ms": decision["latency_ms"],
                             "source": "reflex_gpu",
+                            "selection_source": "reranker",
+                            "top_candidates": self.compact_candidates(decision.get("ranked_candidates", [])[:5]),
                             "status": "success",
                         }
                     )
@@ -551,8 +561,10 @@ class BrowserOrchestrator:
                     if (
                         cand_url and str(cand_url).startswith("http") and matches_in_title >= 2
                     ) or matches_in_title >= 3:
+                        stop_reason = "target_title_reached"
                         break
-                except Exception:
+                except Exception as e:
+                    stop_reason = f"action_dispatch_error: {e}"
                     continue
 
             final_url_str = str(page.url)
@@ -565,12 +577,37 @@ class BrowserOrchestrator:
             ):
                 self.route_cache.store(start_url, f"GOAL::{goal}", role="url", name=final_url_str, action="goto")
 
+            final_status = "success"
+            final_message = ""
+            if stop_reason and ("confidence_below_threshold" in stop_reason or stop_reason == "no_available_candidates"):
+                if len(steps_log) == 0:
+                    final_status = "needs_fallback"
+                    if "confidence_below_threshold" in stop_reason:
+                        final_message = f"Autonomous navigation stopped: {stop_reason}. Candidates confidence below threshold."
+                    else:
+                        final_message = "Autonomous navigation stopped: no available interactive candidates found on page."
+                else:
+                    final_status = "partial_needs_fallback"
+                    final_message = (
+                        f"Wykonano {len(steps_log)} kroków, ale dalsza autonomiczna nawigacja utknęła (powód: {stop_reason}). "
+                        f"Wybierz kolejny krok z top_candidates lub użyj smart_action / get_aria_snapshot."
+                    )
+            elif len(steps_log) == 0 and stop_reason and "action_dispatch_error" in stop_reason:
+                final_status = "error"
+                final_message = f"Autonomous navigation error: {stop_reason}"
+
+            top_cands = last_ranked_candidates[:5] if last_ranked_candidates else (self.last_candidates[:5] if self.last_candidates else [])
+
             return {
-                "status": "success",
+                "status": final_status,
                 "final_url": page.url,
                 "final_title": await page.title(),
                 "steps_executed": len(steps_log),
                 "goal_satisfaction_rate": last_satisfaction_rate,
+                "stop_reason": stop_reason,
+                "message": final_message,
+                "selection_source": "reranker",
+                "top_candidates": self.compact_candidates(top_cands),
                 "telemetry": {
                     "total_execution_seconds": round(time.perf_counter() - t_start, 2),
                     "reflex_gpu_ms": round(total_reflex_gpu_ms, 2),
@@ -857,6 +894,8 @@ class BrowserOrchestrator:
                 "status": "success",
                 "action": action_desc,
                 "target": f"[{role}] {name}",
+                "selection_source": "llm_target_name",
+                "top_candidates": self.compact_candidates(self.last_candidates[:5]) if self.last_candidates else [],
                 "current_url": page.url,
                 "current_title": await page.title(),
                 "execution_seconds": round(time.perf_counter() - t_start, 2),
@@ -874,6 +913,7 @@ class BrowserOrchestrator:
                 "status": "clarification_needed",
                 "current_url": page.url,
                 "pending_instruction": instruction,
+                "selection_source": "reranker",
                 "confidence": decision.get("confidence", 0.0),
                 "top_candidates": self.compact_candidates(decision.get("ranked_candidates", [])[:5]),
             }
@@ -898,8 +938,10 @@ class BrowserOrchestrator:
             "status": "success",
             "action": action_desc,
             "target": f"[{role}] {name}",
+            "selection_source": "reranker",
             "confidence": decision["confidence"],
             "latency_ms": decision["latency_ms"],
+            "top_candidates": self.compact_candidates(decision.get("ranked_candidates", [])[:5]),
             "current_url": page.url,
             "current_title": await page.title(),
             "execution_seconds": round(time.perf_counter() - t_start, 2),
