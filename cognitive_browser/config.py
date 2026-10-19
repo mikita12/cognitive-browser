@@ -19,6 +19,22 @@ def get_confidence_threshold(default: float = 0.50) -> float:
     return default
 
 
+BM25_CALIBRATED_THRESHOLD: float = 0.02
+
+
+def get_bm25_threshold(default: float = BM25_CALIBRATED_THRESHOLD) -> float:
+    """Returns the calibrated BM25 element scoring threshold for Arm C."""
+    env_val = os.getenv("BM25_CONFIDENCE_THRESHOLD")
+    if env_val:
+        try:
+            val = float(env_val)
+            if 0.0 <= val <= 1.0:
+                return val
+        except ValueError:
+            pass
+    return default
+
+
 def get_reflex_model(default: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1") -> str:
     """Returns the model identifier for Reflex Core (Multilingual Reranker / ModernBERT / DeBERTa / Jina)."""
     return os.getenv("COGNITIVE_BROWSER_MODEL", default)
