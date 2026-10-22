@@ -22,7 +22,7 @@ Cognitive Browser enables AI coding assistants (Antigravity, Claude Desktop, Cur
 ## Architecture Overview
 
 <p align="center">
-  <img src="docs/architecture.svg" alt="Cognitive Browser System Architecture" width="100%" />
+  <img src="docs/architecture.png" alt="Cognitive Browser System Architecture" width="100%" />
 </p>
 
 For complete technical specifications, see the [Architecture & Engineering Guide](docs/architecture.md) (compiled from [`docs/architecture.d2`](docs/architecture.d2) via [D2](https://d2lang.com/)).

@@ -54,6 +54,7 @@ preview/
 .playwright-mcp/
 kod.txt
 *.png
+!docs/architecture.png
 archiwum/
 results/
 test_ornith_ssh.py
