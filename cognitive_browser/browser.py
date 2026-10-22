@@ -6,6 +6,7 @@ click, fill (+ auto-submit), select_option, toggle_checkbox, hover, press_key, s
 
 import os
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
@@ -36,10 +37,12 @@ class BrowserEngine:
         reflex: Optional[Any] = None,
         route_cache: Optional[RouteCache] = None,
         captcha_resolver: Optional[CaptchaResolver] = None,
+        cdp_url: Optional[str] = None,
     ):
         self.reflex = reflex
         self.route_cache = route_cache or RouteCache()
         self.captcha_resolver = captcha_resolver or CaptchaResolver()
+        self.cdp_url = cdp_url or os.getenv("COGNITIVE_BROWSER_CDP_URL")
         self._playwright: Optional[Any] = None
         self._browser: Optional[Browser] = None
         self._active_context: Optional[BrowserContext] = None
@@ -49,41 +52,73 @@ class BrowserEngine:
         """Retrieves or creates a stealth, SSRF-guarded page instance."""
         if self._playwright is None:
             self._playwright = await async_playwright().start()
-            self._browser = await self._playwright.chromium.launch(
-                headless=False,
-                args=[
-                    "--headless=new",
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu-rasterization",
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-infobars",
-                    "--window-size=1366,900",
-                ],
-            )
-            self._active_context = await self._browser.new_context(
-                service_workers="allow",
-                viewport={"width": 1366, "height": 900},
-                user_agent=STEALTH_USER_AGENT,
-                locale="pl-PL",
-                timezone_id="Europe/Warsaw",
-                extra_http_headers={
-                    "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Sec-Ch-Ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-                    "Sec-Ch-Ua-Mobile": "?0",
-                    "Sec-Ch-Ua-Platform": '"Linux"',
-                },
-            )
-            await self._active_context.add_init_script(STEALTH_INIT_SCRIPT)
-            await self._active_context.add_init_script(TURNSTILE_INTERCEPT_SCRIPT)
-            await setup_ssrf_route_guard(self._active_context)
-            self._active_page = await self._active_context.new_page()
+            if self.cdp_url:
+                self._browser = await self._playwright.chromium.connect_over_cdp(self.cdp_url)
+                contexts = self._browser.contexts
+                if contexts:
+                    self._active_context = contexts[0]
+                    pages = self._active_context.pages
+                    self._active_page = pages[0] if pages else await self._active_context.new_page()
+                else:
+                    self._active_context = await self._browser.new_context()
+                    self._active_page = await self._active_context.new_page()
+                await setup_ssrf_route_guard(self._active_context)
+            else:
+                self._browser = await self._playwright.chromium.launch(
+                    headless=False,
+                    args=[
+                        "--headless=new",
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu-rasterization",
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-infobars",
+                        "--window-size=1366,900",
+                    ],
+                )
+                self._active_context = await self._browser.new_context(
+                    service_workers="allow",
+                    viewport={"width": 1366, "height": 900},
+                    user_agent=STEALTH_USER_AGENT,
+                    locale="pl-PL",
+                    timezone_id="Europe/Warsaw",
+                    extra_http_headers={
+                        "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
+                        "Sec-Ch-Ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                        "Sec-Ch-Ua-Mobile": "?0",
+                        "Sec-Ch-Ua-Platform": '"Linux"',
+                    },
+                )
+                await self._active_context.add_init_script(STEALTH_INIT_SCRIPT)
+                await self._active_context.add_init_script(TURNSTILE_INTERCEPT_SCRIPT)
+                await setup_ssrf_route_guard(self._active_context)
+                self._active_page = await self._active_context.new_page()
 
         if self._active_page is None or self._active_page.is_closed():
             assert self._active_context is not None
             self._active_page = await self._active_context.new_page()
 
         return self._active_page
+
+    async def capture_screenshot(self, page: Optional[Page] = None, output_path: Optional[str] = None) -> Optional[str]:
+        """Captures a screenshot of the current active page for error telemetry."""
+        try:
+            target_page = page or self._active_page
+            if target_page is None or target_page.is_closed():
+                return None
+            if not output_path:
+                from datetime import datetime, timezone
+                ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")[:19]
+                err_dir = Path.home() / ".applypilot" / "errors" / "screenshots"
+                err_dir.mkdir(parents=True, exist_ok=True)
+                output_path = str(err_dir / f"cognitive_error_{ts}.png")
+            else:
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+            await target_page.screenshot(path=output_path, full_page=True)
+            return output_path
+        except Exception:
+            return None
 
     async def close(self) -> None:
         """Closes browser instances and terminates Playwright."""

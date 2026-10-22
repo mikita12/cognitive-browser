@@ -37,18 +37,19 @@ _last_candidates: List[Dict[str, Any]] = []
 MIN_GOAL_CONFIDENCE = 0.35
 
 
-def get_services() -> tuple[ReflexCore, BrowserEngine]:
+def get_services(cdp_url: Optional[str] = None) -> tuple[ReflexCore, BrowserEngine]:
     global _reflex, _engine
+    effective_cdp = cdp_url or os.getenv("COGNITIVE_BROWSER_CDP_URL")
     if _reflex is None:
         _reflex = ReflexCore()
-    if _engine is None:
-        _engine = BrowserEngine(reflex=_reflex)
+    if _engine is None or (effective_cdp and getattr(_engine, "cdp_url", None) != effective_cdp):
+        _engine = BrowserEngine(reflex=_reflex, cdp_url=effective_cdp)
     return _reflex, _engine
 
 
-def get_orchestrator() -> BrowserOrchestrator:
+def get_orchestrator(cdp_url: Optional[str] = None) -> BrowserOrchestrator:
     global _orchestrator
-    reflex, engine = get_services()
+    reflex, engine = get_services(cdp_url=cdp_url)
     if _orchestrator is None or _orchestrator.engine is not engine or _orchestrator.reflex is not reflex:
         _orchestrator = BrowserOrchestrator(engine=engine, reflex=reflex)
     return _orchestrator
@@ -192,11 +193,12 @@ async def get_aria_snapshot(
 
 def main(argv: Optional[List[str]] = None) -> None:
     import argparse
+    import os
     import sys
 
     from .config import set_cookies_enabled
 
-    parser = argparse.ArgumentParser(description="Cognitive Browser MCP Server", add_help=False)
+    parser = argparse.ArgumentParser(description="Cognitive Browser MCP Server", add_help=True)
     parser.add_argument(
         "--enable-cookies",
         "--cookies",
@@ -204,9 +206,18 @@ def main(argv: Optional[List[str]] = None) -> None:
         dest="enable_cookies",
         help="Allow importing local browser/system cookies when browser_context is specified.",
     )
+    parser.add_argument(
+        "--cdp-endpoint",
+        "--cdp-url",
+        type=str,
+        default=os.getenv("COGNITIVE_BROWSER_CDP_URL"),
+        help="CDP endpoint URL to attach to an existing Chrome browser (e.g. http://localhost:9222).",
+    )
     args, remaining = parser.parse_known_args(argv)
     if args.enable_cookies:
         set_cookies_enabled(True)
+    if args.cdp_endpoint:
+        os.environ["COGNITIVE_BROWSER_CDP_URL"] = args.cdp_endpoint
     if argv is None:
         sys.argv = [sys.argv[0], *remaining]
     mcp.run()
