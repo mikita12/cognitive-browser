@@ -10,9 +10,9 @@ services:
       # Secure default: bind strictly to loopback interface. Do NOT expose to 0.0.0.0 without API_TOKEN.
       - "127.0.0.1:8000:8000"
     environment:
-      - DEVICE=cuda
+      - COGNITIVE_BROWSER_DEVICE=cuda
       - PORT=8000
-      - MODEL_NAME=cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+      - COGNITIVE_BROWSER_MODEL=cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
       - SESSION_DIR=/data/browser_sessions
       # Optional: uncomment to secure endpoints with bearer token authentication
       # - API_TOKEN=your-secret-token-here

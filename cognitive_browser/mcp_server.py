@@ -5,6 +5,7 @@ with Stealth BrowserEngine, RouteCache, full DOM action planning, and smart goal
 Refactored to delegate execution to BrowserOrchestrator.
 """
 
+import os
 from typing import Any, Dict, List, Optional, Union
 
 from mcp.server.mcpserver import MCPServer

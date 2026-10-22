@@ -4,6 +4,8 @@ Supports environment variables and programmatic overrides.
 """
 
 import os
+import warnings
+from typing import Optional
 
 
 def get_confidence_threshold(default: float = 0.50) -> float:
@@ -36,8 +38,53 @@ def get_bm25_threshold(default: float = BM25_CALIBRATED_THRESHOLD) -> float:
 
 
 def get_reflex_model(default: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1") -> str:
-    """Returns the model identifier for Reflex Core (Multilingual Reranker / ModernBERT / DeBERTa / Jina)."""
-    return os.getenv("COGNITIVE_BROWSER_MODEL", default)
+    """
+    Returns the model identifier for Reflex Core (Multilingual Reranker / ModernBERT / DeBERTa / Jina).
+    Checks COGNITIVE_BROWSER_MODEL first, then falls back to deprecated MODEL_NAME with a warning.
+    """
+    if "COGNITIVE_BROWSER_MODEL" in os.environ:
+        return os.environ["COGNITIVE_BROWSER_MODEL"].strip()
+
+    if "MODEL_NAME" in os.environ:
+        warnings.warn(
+            "Environment variable 'MODEL_NAME' is deprecated; use 'COGNITIVE_BROWSER_MODEL' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return os.environ["MODEL_NAME"].strip()
+
+    return default
+
+
+def get_device(default: Optional[str] = None) -> str:
+    """
+    Returns the target execution device ('cuda', 'mps', 'cpu', or 'api').
+    Checks COGNITIVE_BROWSER_DEVICE first, then falls back to deprecated DEVICE with a warning.
+    """
+    if "COGNITIVE_BROWSER_DEVICE" in os.environ:
+        return os.environ["COGNITIVE_BROWSER_DEVICE"].strip().lower()
+
+    if "DEVICE" in os.environ:
+        warnings.warn(
+            "Environment variable 'DEVICE' is deprecated; use 'COGNITIVE_BROWSER_DEVICE' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return os.environ["DEVICE"].strip().lower()
+
+    if default is not None:
+        return default
+
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return "cuda"
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
+    except ImportError:
+        pass
+    return "cpu"
 
 
 def get_rerank_api_url() -> str:

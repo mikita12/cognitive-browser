@@ -18,19 +18,14 @@ from playwright.async_api import Browser, async_playwright
 from pydantic import BaseModel, Field
 
 from .browser import BrowserEngine
-from .config import get_reflex_model
+from .config import get_device, get_reflex_model
 from .orchestrator import BrowserOrchestrator
 from .reflex import AriaElementParser, ReflexCore
 from .security import SecurityError, setup_ssrf_route_guard, validate_url
 
 # Environment configuration
 MODEL_NAME = get_reflex_model()
-DEVICE = os.getenv(
-    "DEVICE",
-    "cuda"
-    if torch.cuda.is_available()
-    else ("mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu"),
-)
+DEVICE = get_device()
 PORT = int(os.getenv("PORT", "8000"))
 API_TOKEN = os.getenv("API_TOKEN", "").strip()
 SESSION_DIR = os.getenv("SESSION_DIR")

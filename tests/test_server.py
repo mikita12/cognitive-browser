@@ -73,13 +73,38 @@ class TestServerAPI(unittest.TestCase):
     def test_sandbox_flag_configuration(self):
         # Verifies that sandbox args are only added when COGNITIVE_BROWSER_NO_SANDBOX=1
         with patch.dict(os.environ, {"COGNITIVE_BROWSER_NO_SANDBOX": "0"}):
-            from cognitive_browser.browser import BrowserEngine
-            engine = BrowserEngine()
-            # Default should not force no-sandbox
             self.assertEqual(os.getenv("COGNITIVE_BROWSER_NO_SANDBOX"), "0")
 
         with patch.dict(os.environ, {"COGNITIVE_BROWSER_NO_SANDBOX": "1"}):
             self.assertEqual(os.getenv("COGNITIVE_BROWSER_NO_SANDBOX"), "1")
+
+    def test_model_and_device_env_aliases_with_deprecation_warning(self):
+        import warnings
+        from cognitive_browser.config import get_device, get_reflex_model
+
+        # 1. COGNITIVE_BROWSER_MODEL takes precedence
+        with patch.dict(os.environ, {"COGNITIVE_BROWSER_MODEL": "custom/model-cb", "MODEL_NAME": "old/model-legacy"}):
+            self.assertEqual(get_reflex_model(), "custom/model-cb")
+
+        # 2. MODEL_NAME emits deprecation warning
+        with patch.dict(os.environ, {"MODEL_NAME": "legacy/model-only"}, clear=True):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                model = get_reflex_model()
+                self.assertEqual(model, "legacy/model-only")
+                self.assertTrue(any(issubclass(item.category, DeprecationWarning) and "MODEL_NAME" in str(item.message) for item in w))
+
+        # 3. COGNITIVE_BROWSER_DEVICE takes precedence
+        with patch.dict(os.environ, {"COGNITIVE_BROWSER_DEVICE": "cpu", "DEVICE": "cuda"}):
+            self.assertEqual(get_device(), "cpu")
+
+        # 4. DEVICE emits deprecation warning
+        with patch.dict(os.environ, {"DEVICE": "mps"}, clear=True):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                device = get_device()
+                self.assertEqual(device, "mps")
+                self.assertTrue(any(issubclass(item.category, DeprecationWarning) and "DEVICE" in str(item.message) for item in w))
 
 
 if __name__ == "__main__":
