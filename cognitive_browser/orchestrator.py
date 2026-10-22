@@ -508,7 +508,9 @@ class BrowserOrchestrator:
                 last_ranked_candidates = decision.get("ranked_candidates", [])
 
                 if last_satisfaction_rate >= 0.65 and last_satisfaction_rate > confidence + 0.05:
-                    stop_reason = f"satisfaction_higher_than_confidence (sat={last_satisfaction_rate:.3f}, conf={confidence:.3f})"
+                    stop_reason = (
+                        f"satisfaction_higher_than_confidence (sat={last_satisfaction_rate:.3f}, conf={confidence:.3f})"
+                    )
                     break
 
                 if confidence < MIN_GOAL_CONFIDENCE and not (
@@ -581,13 +583,19 @@ class BrowserOrchestrator:
 
             final_status = "success"
             final_message = ""
-            if stop_reason and ("confidence_below_threshold" in stop_reason or stop_reason == "no_available_candidates"):
+            if stop_reason and (
+                "confidence_below_threshold" in stop_reason or stop_reason == "no_available_candidates"
+            ):
                 if len(steps_log) == 0:
                     final_status = "needs_fallback"
                     if "confidence_below_threshold" in stop_reason:
-                        final_message = f"Autonomous navigation stopped: {stop_reason}. Candidates confidence below threshold."
+                        final_message = (
+                            f"Autonomous navigation stopped: {stop_reason}. Candidates confidence below threshold."
+                        )
                     else:
-                        final_message = "Autonomous navigation stopped: no available interactive candidates found on page."
+                        final_message = (
+                            "Autonomous navigation stopped: no available interactive candidates found on page."
+                        )
                 else:
                     final_status = "partial_needs_fallback"
                     final_message = (
@@ -598,7 +606,11 @@ class BrowserOrchestrator:
                 final_status = "error"
                 final_message = f"Autonomous navigation error: {stop_reason}"
 
-            top_cands = last_ranked_candidates[:5] if last_ranked_candidates else (self.last_candidates[:5] if self.last_candidates else [])
+            top_cands = (
+                last_ranked_candidates[:5]
+                if last_ranked_candidates
+                else (self.last_candidates[:5] if self.last_candidates else [])
+            )
 
             return {
                 "status": final_status,

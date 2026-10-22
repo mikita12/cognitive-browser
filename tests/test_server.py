@@ -64,6 +64,7 @@ class TestServerAPI(unittest.TestCase):
     def test_cors_middleware_configuration(self):
         # Default CORS settings: no allowed origins, allow_credentials=False
         from fastapi.middleware.cors import CORSMiddleware
+
         cors_middlewares = [m for m in app.user_middleware if m.cls == CORSMiddleware]
         self.assertTrue(len(cors_middlewares) > 0)
         options = cors_middlewares[0].kwargs
@@ -80,6 +81,7 @@ class TestServerAPI(unittest.TestCase):
 
     def test_model_and_device_env_aliases_with_deprecation_warning(self):
         import warnings
+
         from cognitive_browser.config import get_device, get_reflex_model
 
         # 1. COGNITIVE_BROWSER_MODEL takes precedence
@@ -92,7 +94,12 @@ class TestServerAPI(unittest.TestCase):
                 warnings.simplefilter("always")
                 model = get_reflex_model()
                 self.assertEqual(model, "legacy/model-only")
-                self.assertTrue(any(issubclass(item.category, DeprecationWarning) and "MODEL_NAME" in str(item.message) for item in w))
+                self.assertTrue(
+                    any(
+                        issubclass(item.category, DeprecationWarning) and "MODEL_NAME" in str(item.message)
+                        for item in w
+                    )
+                )
 
         # 3. COGNITIVE_BROWSER_DEVICE takes precedence
         with patch.dict(os.environ, {"COGNITIVE_BROWSER_DEVICE": "cpu", "DEVICE": "cuda"}):
@@ -104,7 +111,9 @@ class TestServerAPI(unittest.TestCase):
                 warnings.simplefilter("always")
                 device = get_device()
                 self.assertEqual(device, "mps")
-                self.assertTrue(any(issubclass(item.category, DeprecationWarning) and "DEVICE" in str(item.message) for item in w))
+                self.assertTrue(
+                    any(issubclass(item.category, DeprecationWarning) and "DEVICE" in str(item.message) for item in w)
+                )
 
 
 if __name__ == "__main__":

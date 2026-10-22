@@ -3,10 +3,12 @@ Unit tests for Reflex page satisfaction requiring specific goal phrases
 and cognitive_browse returning explicit 'needs_fallback' status on 0 steps.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from cognitive_browser.reflex import ReflexCore
+
+import pytest
+
 from cognitive_browser.orchestrator import BrowserOrchestrator
+from cognitive_browser.reflex import ReflexCore
 
 
 def test_extract_specific_goal_phrases():
@@ -107,9 +109,7 @@ async def test_cognitive_browse_returns_needs_fallback_on_confidence_below_thres
     mock_reflex.evaluate_candidates.return_value = {
         "confidence": 0.32,
         "latency_ms": 8.0,
-        "ranked_candidates": [
-            {"role": "link", "name": "Irrelevant Footer Link", "ref": "aria-1"}
-        ],
+        "ranked_candidates": [{"role": "link", "name": "Irrelevant Footer Link", "ref": "aria-1"}],
         "should_escalate": True,
         "target_ref": "NONE",
     }
@@ -121,9 +121,7 @@ async def test_cognitive_browse_returns_needs_fallback_on_confidence_below_thres
     mock_page.title.return_value = "Example Portal"
     # Snapshot with some links so candidates exist
     mock_page.aria_snapshot.return_value = (
-        '- heading "Portal Title"\n'
-        '- link "Irrelevant Footer Link"\n'
-        '- link "Privacy Policy"\n'
+        '- heading "Portal Title"\n- link "Irrelevant Footer Link"\n- link "Privacy Policy"\n'
     )
 
     res = await orchestrator.browse(
@@ -264,9 +262,7 @@ async def test_cognitive_browse_returns_partial_needs_fallback_when_steps_execut
         {
             "confidence": 0.88,
             "latency_ms": 10.0,
-            "ranked_candidates": [
-                {"role": "link", "name": "Kategoria Samochody", "ref": "aria-1"}
-            ],
+            "ranked_candidates": [{"role": "link", "name": "Kategoria Samochody", "ref": "aria-1"}],
             "should_escalate": False,
             "target_ref": "aria-1",
         },
@@ -284,15 +280,13 @@ async def test_cognitive_browse_returns_partial_needs_fallback_when_steps_execut
 
     orchestrator = BrowserOrchestrator(engine=mock_engine, reflex=mock_reflex)
     # Stub dispatch_step_action to avoid real browser calls
-    orchestrator.dispatch_step_action = AsyncMock(return_value="click('Kategoria Samochody')")
+    orchestrator.dispatch_step_action = AsyncMock(return_value="click('Kategoria Samochody')")  # type: ignore[method-assign]
 
     mock_page = AsyncMock()
     mock_page.url = "https://example.com/start"
     mock_page.title.return_value = "Example Marketplace"
     mock_page.aria_snapshot.return_value = (
-        '- heading "Marketplace"\n'
-        '- link "Kategoria Samochody"\n'
-        '- link "Niejasny link"\n'
+        '- heading "Marketplace"\n- link "Kategoria Samochody"\n- link "Niejasny link"\n'
     )
 
     res = await orchestrator.browse(
@@ -308,4 +302,3 @@ async def test_cognitive_browse_returns_partial_needs_fallback_when_steps_execut
     assert "confidence_below_threshold" in res["stop_reason"]
     assert len(res["top_candidates"]) > 0
     assert res["top_candidates"][0]["name"] == "Niejasny link"
-

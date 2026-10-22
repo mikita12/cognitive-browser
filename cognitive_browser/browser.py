@@ -112,6 +112,7 @@ class BrowserEngine:
                 return None
             if not output_path:
                 from datetime import datetime, timezone
+
                 ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")[:19]
                 err_dir = Path.home() / ".applypilot" / "errors" / "screenshots"
                 err_dir.mkdir(parents=True, exist_ok=True)
@@ -463,7 +464,9 @@ class BrowserEngine:
             raise SecurityError(f"File upload rejected: file does not exist: '{file_path}' (resolved: '{resolved}')")
 
         if os.path.isdir(resolved):
-            raise SecurityError(f"File upload rejected: path is a directory, not a file: '{file_path}' (resolved: '{resolved}')")
+            raise SecurityError(
+                f"File upload rejected: path is a directory, not a file: '{file_path}' (resolved: '{resolved}')"
+            )
 
         if not allowed_dirs:
             raise SecurityError(

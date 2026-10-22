@@ -195,49 +195,64 @@ class TestPayloadBinding:
 
 class TestBrowserEngineUpload:
     @pytest.mark.anyio
-    async def test_upload_file_direct_input(self):
+    async def test_upload_file_direct_input(self, monkeypatch):
         """Tests uploading files directly when the locator is an input[type='file']."""
-        engine = BrowserEngine()
-        mock_page = MagicMock()
-        mock_locator = AsyncMock()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            test_file = os.path.join(tmp_dir, "test.pdf")
+            with open(test_file, "wb") as f:
+                f.write(b"%PDF-1.4 test")
+            monkeypatch.setenv("UPLOAD_ALLOWED_DIRS", tmp_dir)
 
-        # Mock element is input:file
-        mock_locator.evaluate = AsyncMock(return_value="input:file")
-        mock_locator.set_input_files = AsyncMock()
-        engine._resolve_locator = AsyncMock(return_value=mock_locator)  # type: ignore[method-assign]
+            engine = BrowserEngine()
+            mock_page = MagicMock()
+            mock_locator = AsyncMock()
 
-        success = await engine.upload_file(mock_page, role="button", name="Wybierz plik", file_paths="/tmp/test.pdf")
-        assert success is True
-        mock_locator.set_input_files.assert_awaited_once()
+            # Mock element is input:file
+            mock_locator.evaluate = AsyncMock(return_value="input:file")
+            mock_locator.set_input_files = AsyncMock()
+            engine._resolve_locator = AsyncMock(return_value=mock_locator)  # type: ignore[method-assign]
+
+            success = await engine.upload_file(mock_page, role="button", name="Wybierz plik", file_paths=test_file)
+            assert success is True
+            mock_locator.set_input_files.assert_awaited_once()
 
     @pytest.mark.anyio
-    async def test_upload_file_chooser_event(self):
+    async def test_upload_file_chooser_event(self, monkeypatch):
         """Tests modern file upload triggered by expect_file_chooser."""
-        engine = BrowserEngine()
-        mock_page = MagicMock()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_a = os.path.join(tmp_dir, "a.png")
+            file_b = os.path.join(tmp_dir, "b.png")
+            with open(file_a, "wb") as f:
+                f.write(b"pngA")
+            with open(file_b, "wb") as f:
+                f.write(b"pngB")
+            monkeypatch.setenv("UPLOAD_ALLOWED_DIRS", tmp_dir)
 
-        # Locator is a custom dropzone/button (not input:file)
-        mock_locator = AsyncMock()
-        mock_locator.evaluate = AsyncMock(return_value="button:")
-        mock_locator.click = AsyncMock()
-        engine._resolve_locator = AsyncMock(return_value=mock_locator)  # type: ignore[method-assign]
+            engine = BrowserEngine()
+            mock_page = MagicMock()
 
-        # Mock expect_file_chooser context manager
-        mock_fc = AsyncMock()
-        mock_fc.set_files = AsyncMock()
-        mock_fc_info = MagicMock()
-        mock_fc_info.value = mock_fc
+            # Locator is a custom dropzone/button (not input:file)
+            mock_locator = AsyncMock()
+            mock_locator.evaluate = AsyncMock(return_value="button:")
+            mock_locator.click = AsyncMock()
+            engine._resolve_locator = AsyncMock(return_value=mock_locator)  # type: ignore[method-assign]
 
-        mock_context_manager = MagicMock()
-        mock_context_manager.__aenter__ = AsyncMock(return_value=mock_fc_info)
-        mock_context_manager.__aexit__ = AsyncMock(return_value=None)
-        mock_page.expect_file_chooser.return_value = mock_context_manager
+            # Mock expect_file_chooser context manager
+            mock_fc = AsyncMock()
+            mock_fc.set_files = AsyncMock()
+            mock_fc_info = MagicMock()
+            mock_fc_info.value = mock_fc
 
-        success = await engine.upload_file(
-            mock_page, role="button", name="Załącz dokument", file_paths=["/tmp/a.png", "/tmp/b.png"]
-        )
-        assert success is True
-        mock_fc.set_files.assert_awaited_once()
+            mock_context_manager = MagicMock()
+            mock_context_manager.__aenter__ = AsyncMock(return_value=mock_fc_info)
+            mock_context_manager.__aexit__ = AsyncMock(return_value=None)
+            mock_page.expect_file_chooser.return_value = mock_context_manager
+
+            success = await engine.upload_file(
+                mock_page, role="button", name="Załącz dokument", file_paths=[file_a, file_b]
+            )
+            assert success is True
+            mock_fc.set_files.assert_awaited_once()
 
 
 class TestSystemCookies:

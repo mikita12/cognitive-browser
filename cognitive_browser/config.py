@@ -175,4 +175,3 @@ def get_upload_allowed_dirs() -> list[str]:
         if part:
             dirs.append(os.path.realpath(os.path.expanduser(part)))
     return dirs
-

@@ -118,6 +118,7 @@ class TestSecurityControls(unittest.TestCase):
         import asyncio
         import socket
         from unittest.mock import patch
+
         from cognitive_browser.security import async_validate_url
 
         with patch("socket.getaddrinfo", side_effect=socket.gaierror(-2, "Name or service not known")):
@@ -134,6 +135,7 @@ class TestSecurityControls(unittest.TestCase):
 
     def test_async_validate_url_blocks_private(self):
         import asyncio
+
         from cognitive_browser.security import async_validate_url
 
         async def _test():

@@ -5,8 +5,9 @@ Verifies UPLOAD_ALLOWED_DIRS enforcement, symlink resolution, traversal mitigati
 
 import os
 import tempfile
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from cognitive_browser.browser import BrowserEngine
 from cognitive_browser.config import get_upload_allowed_dirs
