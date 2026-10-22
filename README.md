@@ -1,8 +1,10 @@
 # Cognitive Browser
 
 > **Zero-token autonomous browser agent & MCP server powered by pluggable local GPU Cross-Encoder / NLI routing (`ReflexCore`), universal cross-lingual form binding (`PayloadBinder`), Stealth Playwright (`BrowserEngine`), and self-healing `RouteCache`.**
+>
+> *\*Note on "Zero-Token": Refers strictly to the Cognitive Browser MCP server and ReflexCore engine, which perform DOM candidate ranking, filtering, and autonomous multi-hop navigation locally on GPU with 0 LLM tokens. The orchestrating host agent (e.g. Ornith 1.5) still consumes LLM tokens (mean: 41,668 tokens/episode in Arm A vs 85,332 in Arm B).*
 
-Cognitive Browser enables AI coding assistants (Antigravity, Claude Desktop, Cursor) to navigate the web, search dynamic SPAs, and fill complex multi-field forms with **0 LLM tokens** consumed during DOM exploration and action execution.
+Cognitive Browser enables AI coding assistants (Antigravity, Claude Desktop, Cursor) to navigate the web, search dynamic SPAs, and fill complex multi-field forms with **0 LLM tokens** consumed by the browser server during DOM exploration and action execution.
 
 ---
 
@@ -72,20 +74,22 @@ export JINA_API_KEY="jina_your_api_key"
 
 ---
 
-## 📊 Empirical Evaluation & Real-World Benchmark (Run 6)
+## 📊 Empirical Evaluation & Real-World Benchmark: Run 6 (Arm A: 31.1% vs Arm B: 44.0% Success Rate)
 
 To assess autonomous navigation capabilities under strict real-world constraints, Cognitive Browser was evaluated in an end-to-end, **100% offline / self-hosted benchmark** using the open-weights **`ornith-1.5:35b`** Mixture-of-Experts model as the host agent.
 
 ### Experimental Setup
 - **Benchmark Dataset:** 80 multi-hop navigation tasks on live public websites across 3 languages (English, Polish, German). Over 65% of tasks require $\ge 3$ navigation steps (searching, filtering, deep-linking, detail extraction).
-- **Repetitions:** 3 randomized repetitions per task (240 episodes per arm; 720 episodes total) with strict per-domain rate limiting.
+- **Repetitions:** 3 randomized repetitions per task (240 planned episodes per arm; 720 episodes total) with strict per-domain rate limiting.
 - **Judge:** Independent, 100% blind LLM evaluator (Gemini Flash) judging final browser state (URL, extracted DOM text, and visual screenshots) with zero access to agent tool traces.
 - **Arms:**
   - **Arm A (Cognitive Browser):** Host agent with `ReflexCore` (local GPU Cross-Encoder: `mmarco-mMiniLMv2-L12-H384-v1`) and surgical `smart_action` fallback.
   - **Arm B (Standard Playwright MCP):** Host agent with raw Playwright tools (`browser_navigate`, `browser_click`, `browser_type`) receiving full ARIA snapshots on every step.
   - **Arm C (BM25 Baseline):** Host agent with lexical BM25 ranking ($\tau = 0.02$).
 
-### 1. Task Success Rate & Reliability
+### 1. Task Success Rate & Reliability (Arm A: 31.1% vs Arm B: 44.0%)
+
+In this benchmark, Arm A (Cognitive Browser) achieved a lower episode success rate (**31.1%**) than standard Playwright MCP in Arm B (**44.0%**).
 
 | Arm | Episode Success Rate | 95% Wilson Confidence Interval | Task Success (Majority $\ge 2/3$) | Infrastructure Timeouts (>420s) |
 | :--- | :---: | :---: | :---: | :---: |
@@ -93,7 +97,9 @@ To assess autonomous navigation capabilities under strict real-world constraints
 | **Arm B: Playwright MCP (Standard)** | **44.0%** (81/184) | [37.0% – 51.2%] | **42.9%** (33/80) | **78** *(1.7x more timeouts)* |
 | **Arm C: BM25 Baseline ($\tau=0.02$)** | **12.5%** (27/216) | [8.7% – 17.6%] | **12.5%** (10/80) | **37** |
 
-> **Key Takeaway:** While raw Playwright MCP achieves higher nominal task completion on simple pages, it suffers from **1.7x higher timeout rates** due to catastrophic DOM context explosion. Cognitive Browser delivers resilient navigation with bounded context overhead.
+*Note on Missing Episodes:* Out of 240 planned episodes per arm (80 tasks × 3 repetitions), only 209 (Arm A), 184 (Arm B), and 216 (Arm C) completed episodes were recorded by the benchmark harness. The remaining episodes are missing due to harness-level socket/network disconnects, process timeouts (>420s), or unhandled runner terminations during execution on live websites.
+
+> **Tradeoff Summary:** Cognitive Browser represents an architectural tradeoff: it reduces host agent token usage by 51.2% (mean 41,668 vs 85,332 tokens/episode) and encounters fewer infrastructure timeouts (45 vs 78), but achieves a lower episode success rate (31.1% vs 44.0%) compared to standard Playwright MCP.
 
 ### 2. Token Efficiency & Latency
 
@@ -103,7 +109,9 @@ To assess autonomous navigation capabilities under strict real-world constraints
 | **Arm B: Playwright MCP (Standard)** | 85,332 | 80,916 | Baseline (1.0x) | 331.6s |
 | **Arm C: BM25 Baseline** | 16,464 | 16,079 | 80.7% less tokens | 287.1s |
 
-By offloading candidate ranking, menu traversal, and element filtering to an on-device Cross-Encoder on GPU, Cognitive Browser **cuts total LLM token usage in half** while running autonomous sub-steps in milliseconds.
+*Note on Token Accounting:* Token metrics (mean and median per episode) are calculated across all recorded episodes for that arm (including failed tasks and timeouts), not per successful task completion.
+
+By offloading candidate ranking, menu traversal, and element filtering to an on-device Cross-Encoder on GPU, Cognitive Browser cuts total host agent LLM token usage in half while running autonomous sub-steps locally in milliseconds.
 
 ### 3. Statistical Significance (McNemar's Paired Test)
 
@@ -112,7 +120,7 @@ McNemar's test with Edwards continuity correction computed directly from raw pai
 - **Arm A (`ReflexCore`) vs Arm B (`Playwright MCP`):**
   - Contingency table: Both pass: 12 | Only A passes: 8 | Only B passes: 13 | Both fail: 47
   - $\chi^2 = 0.7619$, **$p = 0.3827$**
-  - **Conclusion:** There is **no statistically significant difference** in task resolution capability ($p \ge 0.05$), proving that Cognitive Browser achieves comparable agency at **half the token cost**.
+  - **Conclusion:** The difference in majority task success rate between Arm A and Arm B is not statistically significant at $n=80$ ($p \ge 0.05$). However, the paired test has low statistical power at this sample size, and this result does not prove equivalence between the two systems.
 
 - **Arm A (`ReflexCore`) vs Arm C (`BM25`):**
   - Contingency table: Both pass: 4 | Only A passes: 16 | Only C passes: 3 | Both fail: 57
