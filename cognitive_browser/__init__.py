@@ -15,6 +15,7 @@ from .payload import PayloadBinder
 from .reflex import ReflexCore
 from .security import (
     SecurityError,
+    async_validate_url,
     is_exempt_origin,
     mask_sensitive_value,
     setup_ssrf_route_guard,
@@ -49,6 +50,7 @@ __all__ = [
     "get_decision_router",
     "AgentCore",
     "validate_url",
+    "async_validate_url",
     "setup_ssrf_route_guard",
     "is_exempt_origin",
     "SecurityError",

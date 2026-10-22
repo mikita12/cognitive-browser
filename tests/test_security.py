@@ -111,6 +111,42 @@ class TestSecurityControls(unittest.TestCase):
         self.assertIn("'''", cleaned)
         self.assertLessEqual(len(cleaned), 50)
 
+    def test_dns_failure_allows_url_sync_and_async(self):
+        # Intentional design decision: When DNS resolution fails with socket.gaierror,
+        # validate_url and async_validate_url pass the URL through so that standard browser navigation
+        # can handle NXDOMAIN / network errors naturally.
+        import asyncio
+        import socket
+        from unittest.mock import patch
+        from cognitive_browser.security import async_validate_url
+
+        with patch("socket.getaddrinfo", side_effect=socket.gaierror(-2, "Name or service not known")):
+            res_sync = validate_url("https://nonexistent-domain-123456789.org/test")
+            self.assertEqual(res_sync, "https://nonexistent-domain-123456789.org/test")
+
+        async def _test_async_dns_fail():
+            loop = asyncio.get_running_loop()
+            with patch.object(loop, "getaddrinfo", side_effect=socket.gaierror(-2, "Name or service not known")):
+                res_async = await async_validate_url("https://nonexistent-domain-123456789.org/test")
+                self.assertEqual(res_async, "https://nonexistent-domain-123456789.org/test")
+
+        asyncio.run(_test_async_dns_fail())
+
+    def test_async_validate_url_blocks_private(self):
+        import asyncio
+        from cognitive_browser.security import async_validate_url
+
+        async def _test():
+            self.assertEqual(await async_validate_url("https://example.com"), "https://example.com")
+            with self.assertRaises(SecurityError):
+                await async_validate_url("http://localhost:8080")
+            with self.assertRaises(SecurityError):
+                await async_validate_url("http://192.168.1.1")
+            with self.assertRaises(SecurityError):
+                await async_validate_url("http://169.254.169.254/latest")
+
+        asyncio.run(_test())
+
 
 if __name__ == "__main__":
     unittest.main()

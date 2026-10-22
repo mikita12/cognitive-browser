@@ -1,17 +1,18 @@
 """
 Security utilities for Cognitive Browser:
-- SSRF prevention (blocking loopback, private networks, cloud metadata endpoints).
+- SSRF prevention (blocking loopback, private networks, cloud metadata endpoints, mitigates DNS rebinding (per-request validation; resolve-then-connect TOCTOU remains)).
 - URL validation and domain allowlist enforcement.
 - Sensitive value masking for input values and action telemetry.
 - Indirect prompt injection sanitization.
 """
 
+import asyncio
 import ipaddress
 import os
 import re
 import socket
 import urllib.parse
-from typing import Any, List, Optional, Set
+from typing import Any, List, Optional, Set, Tuple
 
 
 class SecurityError(ValueError):
@@ -78,18 +79,11 @@ def is_private_ip(ip_str: str) -> bool:
         return False
 
 
-def validate_url(url: str, allow_private: Optional[bool] = None, allowed_domains: Optional[List[str]] = None) -> str:
-    """
-    Validates a URL before navigation to prevent SSRF and unsafe protocols.
-
-    Rules:
-    1. Scheme must be strictly 'http' or 'https'.
-    2. Private/loopback IP addresses (IPv4 & IPv6) and metadata endpoints are rejected by default.
-    3. If ALLOWED_DOMAINS is configured, only matching domains are allowed.
-
-    Raises:
-        SecurityError: If the URL fails security validation.
-    """
+def _validate_url_pre_dns(
+    url: str,
+    allow_private: Optional[bool] = None,
+    allowed_domains: Optional[List[str]] = None,
+) -> Tuple[str, str, str, bool, Optional[List[str]]]:
     if not url or not isinstance(url, str):
         raise SecurityError("Target URL must be a non-empty string.")
 
@@ -124,17 +118,6 @@ def validate_url(url: str, allow_private: Optional[bool] = None, allowed_domains
         if is_private_ip(clean_host):
             raise SecurityError(f"Access to private/local IP address '{hostname}' is prohibited (SSRF prevention).")
 
-        # Resolve hostname to IP to verify it does not resolve to a private network
-        try:
-            addr_info = socket.getaddrinfo(clean_host, None)
-            for entry in addr_info:
-                ip_str = str(entry[4][0])
-                if is_private_ip(ip_str):
-                    raise SecurityError(f"Hostname '{hostname}' resolves to private IP '{ip_str}' (SSRF blocked).")
-        except socket.gaierror:
-            # If DNS resolution fails, allow standard browser navigation to handle NXDOMAIN
-            pass
-
     # 3. Optional domain allowlist enforcement
     if allowed_domains is None:
         env_domains = os.getenv("ALLOWED_DOMAINS", "").strip()
@@ -151,6 +134,71 @@ def validate_url(url: str, allow_private: Optional[bool] = None, allowed_domains
 
         if not domain_match:
             raise SecurityError(f"Host '{hostname}' is not in the allowed domains list: {allowed_domains}")
+
+    return cleaned_url, hostname, clean_host, allow_private, allowed_domains
+
+
+def validate_url(url: str, allow_private: Optional[bool] = None, allowed_domains: Optional[List[str]] = None) -> str:
+    """
+    Validates a URL synchronously before navigation to prevent SSRF and unsafe protocols.
+    Mitigates DNS rebinding (per-request validation; resolve-then-connect TOCTOU remains).
+
+    Rules:
+    1. Scheme must be strictly 'http' or 'https'.
+    2. Private/loopback IP addresses (IPv4 & IPv6) and metadata endpoints are rejected by default.
+    3. Hostname is resolved via DNS to block private IP targets.
+    4. If ALLOWED_DOMAINS is configured, only matching domains are allowed.
+
+    Raises:
+        SecurityError: If the URL fails security validation.
+    """
+    cleaned_url, hostname, clean_host, allow_private, allowed_domains = _validate_url_pre_dns(
+        url, allow_private=allow_private, allowed_domains=allowed_domains
+    )
+
+    if not allow_private:
+        try:
+            addr_info = socket.getaddrinfo(clean_host, None)
+            for entry in addr_info:
+                ip_str = str(entry[4][0])
+                if is_private_ip(ip_str):
+                    raise SecurityError(f"Hostname '{hostname}' resolves to private IP '{ip_str}' (SSRF blocked).")
+        except socket.gaierror:
+            # Conscious design decision: If DNS resolution fails here (e.g. non-existent domain, NXDOMAIN, or transient DNS outage),
+            # we allow the request to pass through so that Chromium / standard browser navigation handles the error naturally.
+            pass
+
+    return cleaned_url
+
+
+async def async_validate_url(
+    url: str, allow_private: Optional[bool] = None, allowed_domains: Optional[List[str]] = None
+) -> str:
+    """
+    Asynchronously validates a URL before navigation to prevent SSRF without blocking the event loop.
+    Mitigates DNS rebinding (per-request validation; resolve-then-connect TOCTOU remains).
+
+    Uses `asyncio.get_running_loop().getaddrinfo` to resolve hostnames non-blockingly.
+
+    Raises:
+        SecurityError: If the URL fails security validation.
+    """
+    cleaned_url, hostname, clean_host, allow_private, allowed_domains = _validate_url_pre_dns(
+        url, allow_private=allow_private, allowed_domains=allowed_domains
+    )
+
+    if not allow_private:
+        try:
+            loop = asyncio.get_running_loop()
+            addr_info = await loop.getaddrinfo(clean_host, None)
+            for entry in addr_info:
+                ip_str = str(entry[4][0])
+                if is_private_ip(ip_str):
+                    raise SecurityError(f"Hostname '{hostname}' resolves to private IP '{ip_str}' (SSRF blocked).")
+        except socket.gaierror:
+            # Conscious design decision: If DNS resolution fails here (e.g. non-existent domain, NXDOMAIN, or transient DNS outage),
+            # we allow the request to pass through so that Chromium / standard browser navigation handles the error naturally.
+            pass
 
     return cleaned_url
 
@@ -242,6 +290,7 @@ async def setup_ssrf_route_guard(
     Registers route handlers on a Playwright BrowserContext or Page to intercept
     and validate every outgoing network request (main document, subresources, XHR,
     fetch, HTTP redirects, and WebSockets) before dispatch.
+    Mitigates DNS rebinding (per-request validation; resolve-then-connect TOCTOU remains).
     Requests to private networks, loopback addresses, or cloud metadata endpoints are aborted.
     """
     context = getattr(target, "context", target)
@@ -257,7 +306,7 @@ async def setup_ssrf_route_guard(
 
         if not is_exempt:
             try:
-                validate_url(url, allow_private=allow_private, allowed_domains=allowed_domains)
+                await async_validate_url(url, allow_private=allow_private, allowed_domains=allowed_domains)
             except SecurityError:
                 await route.abort("blockedbyclient")
                 return
@@ -276,7 +325,7 @@ async def setup_ssrf_route_guard(
                     is_redirect_exempt = is_exempt_origin(target_redirect_url, exempt_origins)
                     if not is_redirect_exempt:
                         try:
-                            validate_url(
+                            await async_validate_url(
                                 target_redirect_url,
                                 allow_private=allow_private,
                                 allowed_domains=allowed_domains,
@@ -301,7 +350,7 @@ async def setup_ssrf_route_guard(
             is_exempt = is_exempt_origin(http_url, exempt_origins)
             if not is_exempt:
                 try:
-                    validate_url(http_url, allow_private=allow_private, allowed_domains=allowed_domains)
+                    await async_validate_url(http_url, allow_private=allow_private, allowed_domains=allowed_domains)
                     await ws.connect()
                 except SecurityError:
                     await ws.close()
