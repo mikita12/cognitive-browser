@@ -122,10 +122,12 @@ flowchart TD
   - Stealth flags (`navigator.webdriver` spoofing, realistic client hints).
   - Deterministic overlay auto-dismissal for standard cookie banners and privacy dialogs.
   - Unified `execute(page, command: ActionCommand)` entrypoint for clicks, text typing, combobox selection, checkbox toggling, and file uploads.
+  - File upload path validation enforcing `UPLOAD_ALLOWED_DIRS` via `os.path.realpath` (rejects non-existent files, directories, symlink escapes, and path traversal with `SecurityError`).
 
-### 3.8 [`cognitive_browser.security`](../cognitive_browser/security.py) & [`cookies.py`](../cognitive_browser/cookies.py)
-- **Security:** Strict URL validation, DNS rebinding mitigation, loopback/cloud-metadata blocking, and sensitive data masking in telemetry.
-- **Cookies:** Reads local Firefox SQLite databases or exported JSON cookie jars to import authenticated sessions directly into browser context.
+### 3.8 [`cognitive_browser.security`](../cognitive_browser/security.py), [`server.py`](../cognitive_browser/server.py) & [`cookies.py`](../cognitive_browser/cookies.py)
+- **Security:** Strict URL validation, asynchronous DNS resolution in route interceptors, DNS rebinding mitigation, loopback/cloud-metadata blocking, and sensitive data masking in telemetry.
+- **REST API:** FastAPI application secured with strict `Authorization: Bearer <token>` (`API_TOKEN`), configurable CORS allowlist (`CORS_ALLOWED_ORIGINS`), and opt-in container sandbox flags (`COGNITIVE_BROWSER_NO_SANDBOX`).
+- **Cookies:** Reads local Firefox SQLite databases or exported JSON cookie jars to import authenticated sessions directly into browser context (disabled by default; requires `--enable-cookies`).
 
 ---
 

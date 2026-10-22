@@ -201,6 +201,24 @@ cognitive_browse(
 )
 ```
 
+> [!IMPORTANT]
+> File upload requires setting the `UPLOAD_ALLOWED_DIRS` environment variable to include the directory containing the file (e.g. `export UPLOAD_ALLOWED_DIRS="/home/user/documents"`). If `UPLOAD_ALLOWED_DIRS` is empty or if the target path resolves outside allowed directories (symlink escapes, `../` traversal), a `SecurityError` is raised.
+
+---
+
+## Configuration
+
+Cognitive Browser is configured through environment variables:
+
+| Variable | Type / Format | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `UPLOAD_ALLOWED_DIRS` | Colon-separated paths (`:`) | `""` (empty) | Directories allowed for file uploads. Paths are resolved via `os.path.realpath` (symlinks and `../` traversal rejected). If empty or unset, all file uploads are blocked with `SecurityError`. |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated origins (`,`) | `""` (empty list) | Allowed CORS origins for the REST API server. When empty, `allow_origins=[]` and `allow_credentials=False`. |
+| `COGNITIVE_BROWSER_NO_SANDBOX` | Integer / Boolean flag (`1`/`0`) | `0` (disabled) | When set to `1` or `true`, appends `--no-sandbox` and `--disable-setuid-sandbox` to Chromium launch arguments. Enabled in `Dockerfile` for containerized environments. |
+| `API_TOKEN` | String | `None` (unset) | Secret Bearer token for authenticating REST API endpoints. Enforced strictly via `Authorization: Bearer <token>` header (query parameter token authentication is rejected). |
+| `COGNITIVE_BROWSER_MODEL` | HuggingFace model ID or API ID | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | Transformer reranker or NLI model ID used by `ReflexCore`. *(Legacy `MODEL_NAME` is supported as a fallback with `DeprecationWarning`).* |
+| `COGNITIVE_BROWSER_DEVICE` | `cuda`, `mps`, `cpu`, or `api` | Auto-detected | Device for neural inference. Auto-detects `mps` -> `cuda` -> `cpu`. *(Legacy `DEVICE` is supported as a fallback with `DeprecationWarning`).* |
+
 ---
 
 ## Running the Test Suite
