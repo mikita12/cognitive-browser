@@ -97,7 +97,7 @@ In this benchmark, Arm A (Cognitive Browser) achieved a lower episode success ra
 | **Arm B: Playwright MCP (Standard)** | **44.0%** (81/184) | [37.0% – 51.2%] | **42.9%** (33/80) | **78** *(1.7x more timeouts)* |
 | **Arm C: BM25 Baseline ($\tau=0.02$)** | **12.5%** (27/216) | [8.7% – 17.6%] | **12.5%** (10/80) | **37** |
 
-*Note on Missing Episodes:* Out of 240 planned episodes per arm (80 tasks × 3 repetitions), only 209 (Arm A), 184 (Arm B), and 216 (Arm C) completed episodes were recorded by the benchmark harness. The remaining episodes are missing due to harness-level socket/network disconnects, process timeouts (>420s), or unhandled runner terminations during execution on live websites.
+*Note on Missing Episodes:* 240 episodes per arm were planned (80 tasks × 3 repetitions); 209 (Arm A), 184 (Arm B), and 216 (Arm C) were recorded. The cause of missing episodes was not recorded.
 
 > **Tradeoff Summary:** Cognitive Browser represents an architectural tradeoff: it reduces host agent token usage by 51.2% (mean 41,668 vs 85,332 tokens/episode) and encounters fewer infrastructure timeouts (45 vs 78), but achieves a lower episode success rate (31.1% vs 44.0%) compared to standard Playwright MCP.
 
