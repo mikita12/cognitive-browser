@@ -1,0 +1,52 @@
+{
+  "calibrated_bm25_threshold": 0.01,
+  "calibration_split": "dev",
+  "dev_tasks_total": 20,
+  "arm_a_escalations": 0,
+  "arm_a_escalation_rate": 0.0,
+  "arm_c_escalations": 11,
+  "arm_c_escalation_rate": 0.55,
+  "diff_percentage_points": 55.0,
+  "threshold_sweep_samples": [
+    {
+      "threshold": 0.01,
+      "escalation_rate": 0.55,
+      "escalations": 11
+    },
+    {
+      "threshold": 0.02,
+      "escalation_rate": 0.55,
+      "escalations": 11
+    },
+    {
+      "threshold": 0.05,
+      "escalation_rate": 0.55,
+      "escalations": 11
+    },
+    {
+      "threshold": 0.1,
+      "escalation_rate": 0.55,
+      "escalations": 11
+    },
+    {
+      "threshold": 0.15,
+      "escalation_rate": 0.55,
+      "escalations": 11
+    },
+    {
+      "threshold": 0.2,
+      "escalation_rate": 0.55,
+      "escalations": 11
+    },
+    {
+      "threshold": 0.25,
+      "escalation_rate": 0.55,
+      "escalations": 11
+    },
+    {
+      "threshold": 0.3,
+      "escalation_rate": 0.55,
+      "escalations": 11
+    }
+  ]
+}

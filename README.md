@@ -134,7 +134,7 @@ python3 results/real_world/run6_local/prepare_judge_inputs.py
 python3 results/real_world/run6_local/generate_final_report.py
 ```
 
-Full paired episode logs, anonymization keys, and judge verdicts are archived in [`results/real_world/run6_local/`](results/real_world/run6_local/).
+Raw logs and screenshots are not included in this repository. Benchmark execution scripts, task definitions, and the generated evaluation summary are provided in `results/real_world/run6_local/` and `results/real_world/new_benchmark_80/`.
 
 ---
 

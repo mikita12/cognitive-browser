@@ -56,7 +56,20 @@ kod.txt
 *.png
 !docs/architecture.png
 archiwum/
-results/
+# Benchmark results: ignore raw logs, traces, screenshots and large jsonl dumps, track scripts and tasks
+results/*
+!results/real_world/
+results/real_world/*
+!results/real_world/run6_local/
+!results/real_world/new_benchmark_80/
+results/real_world/run6_local/*
+!results/real_world/run6_local/*.py
+!results/real_world/run6_local/REPORT.md
+results/real_world/new_benchmark_80/*
+!results/real_world/new_benchmark_80/tasks.jsonl
+!results/real_world/new_benchmark_80/tasks.jsonl.sha256
+!results/real_world/new_benchmark_80/*.py
+!results/real_world/new_benchmark_80/bm25_calibration.json
 test_ornith_ssh.py
 
 # Local benchmark artifacts & session/cookie data
