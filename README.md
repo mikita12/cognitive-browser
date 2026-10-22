@@ -234,7 +234,7 @@ Cognitive Browser is configured through environment variables:
 pytest tests/
 ```
 
-87 automated unit and integration tests (86 pass, 1 expected failure) verify functionality with comprehensive coverage across domain models, ARIA parsing, cross-lingual payload binding, file upload security allowlisting, CAPTCHA handling, RouteCache self-healing, and SSRF security controls.
+95 automated unit and integration tests (94 pass, 1 expected failure) verify functionality with comprehensive coverage across domain models, ARIA parsing, cross-lingual payload binding, file upload security allowlisting, CAPTCHA handling, RouteCache self-healing, and SSRF security controls.
 
 ---
 
