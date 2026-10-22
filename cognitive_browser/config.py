@@ -111,3 +111,21 @@ def get_capsolver_api_key() -> str:
             except Exception:
                 pass
     return ""
+
+
+def get_upload_allowed_dirs() -> list[str]:
+    """
+    Returns list of canonical allowed directory paths for file uploads.
+    Configured via UPLOAD_ALLOWED_DIRS environment variable (colon-separated).
+    Defaults to empty list (all uploads blocked by default).
+    """
+    raw = os.getenv("UPLOAD_ALLOWED_DIRS", "").strip()
+    if not raw:
+        return []
+    dirs: list[str] = []
+    for part in raw.split(":"):
+        part = part.strip()
+        if part:
+            dirs.append(os.path.realpath(os.path.expanduser(part)))
+    return dirs
+

@@ -15,7 +15,7 @@ from .cache import RouteCache
 from .models import ActionCommand, CandidateElement
 from .parser import AriaElementParser
 from .reflex import ReflexCore
-from .security import mask_sensitive_value, validate_url
+from .security import SecurityError, mask_sensitive_value, validate_url
 
 MIN_GOAL_CONFIDENCE = 0.35
 HIGH_CONFIDENCE_THRESHOLD = 0.55
@@ -563,6 +563,8 @@ class BrowserOrchestrator:
                     ) or matches_in_title >= 3:
                         stop_reason = "target_title_reached"
                         break
+                except SecurityError:
+                    raise
                 except Exception as e:
                     stop_reason = f"action_dispatch_error: {e}"
                     continue
@@ -813,6 +815,8 @@ class BrowserOrchestrator:
                 if c_sol.get("detected") and c_sol.get("solved"):
                     step_record["captcha_solved"] = c_sol
                 steps_log.append(step_record)
+            except SecurityError:
+                raise
             except Exception as e:
                 return {
                     "status": "execution_error",

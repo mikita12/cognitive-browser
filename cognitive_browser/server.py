@@ -307,6 +307,8 @@ async def execute_browse_task(req: BrowseTaskRequest):
             "page_content_snippet": res.get("page_content_snippet", ""),
             "total_task_time_ms": round((time.perf_counter() - t0) * 1000, 2),
         }
+    except SecurityError as se:
+        raise HTTPException(status_code=400, detail=str(se)) from se
     except Exception as e:
         return {
             "status": "error",

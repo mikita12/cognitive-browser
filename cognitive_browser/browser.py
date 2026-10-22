@@ -13,9 +13,10 @@ from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from .cache import RouteCache
 from .captcha import TURNSTILE_INTERCEPT_SCRIPT, CaptchaResolver
+from .config import get_upload_allowed_dirs
 from .models import ActionCommand, PageState
 from .parser import AriaElementParser
-from .security import setup_ssrf_route_guard
+from .security import SecurityError, setup_ssrf_route_guard
 
 STEALTH_USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -439,6 +440,51 @@ class BrowserEngine:
         await page.wait_for_timeout(250)
         return True
 
+    @staticmethod
+    def validate_upload_path(file_path: str, allowed_dirs: Optional[List[str]] = None) -> str:
+        """
+        Validates that a file path exists, is a regular file, and resides within an allowed directory.
+        Resolves symlinks via os.path.realpath to prevent directory traversal and symlink escape.
+        Raises SecurityError on validation failure.
+        """
+        if allowed_dirs is None:
+            allowed_dirs = get_upload_allowed_dirs()
+
+        if not file_path or not str(file_path).strip():
+            raise SecurityError("File upload rejected: path must be a non-empty string.")
+
+        expanded = os.path.expanduser(str(file_path).strip())
+        resolved = os.path.realpath(expanded)
+
+        if not os.path.exists(resolved):
+            raise SecurityError(f"File upload rejected: file does not exist: '{file_path}' (resolved: '{resolved}')")
+
+        if os.path.isdir(resolved):
+            raise SecurityError(f"File upload rejected: path is a directory, not a file: '{file_path}' (resolved: '{resolved}')")
+
+        if not allowed_dirs:
+            raise SecurityError(
+                "File upload is blocked: UPLOAD_ALLOWED_DIRS is empty. "
+                "Configure UPLOAD_ALLOWED_DIRS environment variable to permit file uploads."
+            )
+
+        is_allowed = False
+        for allowed_dir in allowed_dirs:
+            try:
+                common = os.path.commonpath([resolved, allowed_dir])
+                if common == allowed_dir:
+                    is_allowed = True
+                    break
+            except ValueError:
+                continue
+
+        if not is_allowed:
+            raise SecurityError(
+                f"File upload rejected: path '{file_path}' (resolved: '{resolved}') is outside allowed upload directories: {allowed_dirs}"
+            )
+
+        return resolved
+
     async def upload_file(
         self,
         page: Page,
@@ -459,7 +505,8 @@ class BrowserEngine:
             return False
 
         files = [file_paths] if isinstance(file_paths, str) else list(file_paths)
-        files = [os.path.abspath(os.path.expanduser(f)) if os.path.exists(os.path.expanduser(f)) else f for f in files]
+        allowed_dirs = get_upload_allowed_dirs()
+        validated_files = [self.validate_upload_path(f, allowed_dirs=allowed_dirs) for f in files]
 
         # 1. Direct input locator if element is or wraps <input type='file'>
         locator = None
@@ -473,7 +520,7 @@ class BrowserEngine:
             try:
                 tag_type = await locator.evaluate("el => (el.tagName + ':' + (el.type || '')).toLowerCase()")
                 if "input:file" in tag_type:
-                    await locator.set_input_files(files, timeout=3000)
+                    await locator.set_input_files(validated_files, timeout=3000)
                     return True
             except Exception:
                 pass
@@ -488,7 +535,7 @@ class BrowserEngine:
                         await locator.click(timeout=1000, force=True)
             raw_val: Any = fc_info.value
             file_chooser: Any = await raw_val if hasattr(raw_val, "__await__") else raw_val
-            await file_chooser.set_files(files)
+            await file_chooser.set_files(validated_files)
             return True
         except Exception:
             pass
@@ -498,7 +545,7 @@ class BrowserEngine:
             try:
                 nested = locator.locator("input[type='file']").first
                 if await nested.count() > 0:
-                    await nested.set_input_files(files, timeout=2500)
+                    await nested.set_input_files(validated_files, timeout=2500)
                     return True
             except Exception:
                 pass
@@ -509,7 +556,7 @@ class BrowserEngine:
             cnt = await page_inputs.count()
             if cnt > 0:
                 idx = min(nth, cnt - 1)
-                await page_inputs.nth(idx).set_input_files(files, timeout=2500)
+                await page_inputs.nth(idx).set_input_files(validated_files, timeout=2500)
                 return True
         except Exception:
             pass
