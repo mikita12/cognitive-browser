@@ -146,17 +146,11 @@ async def run_benchmark():
         "system_cookies": {},
     }
 
-    # 1. System cookie extraction test on local system
+    # 1. System cookie extraction test on local system (count only, no names or domains)
     print("\n[Step 1] System Cookies Verification:")
     firefox_cookies = extract_firefox_cookies("pracuj.pl")
-    print(f"  -> Extracted {len(firefox_cookies)} cookies for 'pracuj.pl' from Firefox profile.")
-    results["system_cookies"]["pracuj_pl_count"] = len(firefox_cookies)
-    if firefox_cookies:
-        results["system_cookies"]["sample"] = {
-            "name": firefox_cookies[0]["name"],
-            "domain": firefox_cookies[0]["domain"],
-            "sameSite": firefox_cookies[0]["sameSite"],
-        }
+    print(f"  -> Extracted {len(firefox_cookies)} cookies for verification.")
+    results["system_cookies"]["count"] = len(firefox_cookies)
 
     # Create dummy files for upload
     with tempfile.NamedTemporaryFile("w", suffix=".pdf", delete=False) as f_cv:

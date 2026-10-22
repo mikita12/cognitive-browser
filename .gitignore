@@ -59,6 +59,13 @@ archiwum/
 results/
 test_ornith_ssh.py
 
+# Local benchmark artifacts & session/cookie data
+*cookies*
+*session*
+benchmarks/*cookie*.json
+benchmarks/*session*.json
+
+
 
 
 

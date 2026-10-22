@@ -1,14 +1,6 @@
 {
   "timestamp": "2026-10-16 19:27:31",
   "scenarios": {},
-  "system_cookies": {
-    "pracuj_pl_count": 24,
-    "sample": {
-      "name": "REDACTED",
-      "domain": ".pracuj.pl",
-      "sameSite": "None"
-    }
-  },
   "neural_matching": {
     "latency_ms": 56.25,
     "fields_matched": 8,
