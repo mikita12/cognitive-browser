@@ -85,5 +85,29 @@ def is_cookie_extraction_enabled() -> bool:
 
 
 def get_capsolver_api_key() -> str:
-    """Returns CapSolver API key from environment."""
-    return os.getenv("CAPSOLVER_API_KEY", "").strip()
+    """Returns CapSolver API key from environment or local/global .env files."""
+    key = os.getenv("CAPSOLVER_API_KEY", "").strip()
+    if key:
+        return key
+
+    from pathlib import Path
+
+    candidates = [
+        Path.cwd() / ".env",
+        Path(__file__).resolve().parent.parent / ".env",
+        Path.home() / ".applypilot" / ".env",
+        Path.home() / ".env",
+    ]
+    for cand in candidates:
+        if cand.exists():
+            try:
+                for line in cand.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line.startswith("CAPSOLVER_API_KEY="):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if val:
+                            os.environ["CAPSOLVER_API_KEY"] = val
+                            return val
+            except Exception:
+                pass
+    return ""
