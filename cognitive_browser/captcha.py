@@ -215,7 +215,10 @@ class CaptchaResolver:
         Returns a dictionary with status, token, and latency.
         """
         if not self.api_key:
-            return {"status": "error", "error": "CapSolver API key not found in environment or .env"}
+            return {
+                "status": "error",
+                "error": "CapSolver API key not found in CAPSOLVER_API_KEY environment variable or COGNITIVE_BROWSER_ENV_FILE",
+            }
 
         c_type = captcha_info.get("type", "turnstile")
         sitekey = captcha_info.get("sitekey", "")

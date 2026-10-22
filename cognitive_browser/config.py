@@ -132,28 +132,27 @@ def is_cookie_extraction_enabled() -> bool:
 
 
 def get_capsolver_api_key() -> str:
-    """Returns CapSolver API key from environment or local/global .env files."""
+    """
+    Returns CapSolver API key from CAPSOLVER_API_KEY environment variable,
+    or optionally from the explicit file specified in COGNITIVE_BROWSER_ENV_FILE.
+    Does not search home directories or cwd implicitly, and does not mutate os.environ.
+    """
     key = os.getenv("CAPSOLVER_API_KEY", "").strip()
     if key:
         return key
 
-    from pathlib import Path
+    env_file = os.getenv("COGNITIVE_BROWSER_ENV_FILE", "").strip()
+    if env_file:
+        from pathlib import Path
 
-    candidates = [
-        Path.cwd() / ".env",
-        Path(__file__).resolve().parent.parent / ".env",
-        Path.home() / ".applypilot" / ".env",
-        Path.home() / ".env",
-    ]
-    for cand in candidates:
-        if cand.exists():
+        p = Path(env_file)
+        if p.is_file():
             try:
-                for line in cand.read_text(encoding="utf-8").splitlines():
+                for line in p.read_text(encoding="utf-8").splitlines():
                     line = line.strip()
                     if line.startswith("CAPSOLVER_API_KEY="):
                         val = line.split("=", 1)[1].strip().strip('"').strip("'")
                         if val:
-                            os.environ["CAPSOLVER_API_KEY"] = val
                             return val
             except Exception:
                 pass

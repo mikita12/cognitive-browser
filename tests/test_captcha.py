@@ -3,6 +3,8 @@ Unit tests for automated CAPTCHA detection and solving module (CaptchaResolver &
 """
 
 import json
+import os
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,13 +14,66 @@ from cognitive_browser.config import get_capsolver_api_key
 from cognitive_browser.reflex import ReflexCore
 
 
-def test_capsolver_key_loading():
-    """Verifies that the CapSolver key is retrieved from env or file."""
+def test_capsolver_key_missing(monkeypatch):
+    """Verifies that missing CapSolver key returns empty string and structured error on solve."""
+    monkeypatch.delenv("CAPSOLVER_API_KEY", raising=False)
+    monkeypatch.delenv("COGNITIVE_BROWSER_ENV_FILE", raising=False)
+
     key = get_capsolver_api_key()
-    assert isinstance(key, str)
-    # If .env or env var exists, it should start with CAP-
-    if key:
-        assert key.startswith("CAP-")
+    assert key == ""
+
+    resolver = CaptchaResolver(api_key="")
+    import asyncio
+
+    res = asyncio.run(resolver.solve({"type": "turnstile", "sitekey": "xyz"}))
+    assert res["status"] == "error"
+    assert "CapSolver API key not found in CAPSOLVER_API_KEY" in res["error"]
+
+
+def test_capsolver_key_from_env(monkeypatch):
+    """Verifies CapSolver key is retrieved from CAPSOLVER_API_KEY env var."""
+    monkeypatch.setenv("CAPSOLVER_API_KEY", "CAP-ENV-VALUE-999")
+    monkeypatch.delenv("COGNITIVE_BROWSER_ENV_FILE", raising=False)
+
+    key = get_capsolver_api_key()
+    assert key == "CAP-ENV-VALUE-999"
+
+
+def test_capsolver_key_from_explicit_env_file(monkeypatch, tmp_path):
+    """Verifies CapSolver key is retrieved from explicit COGNITIVE_BROWSER_ENV_FILE without mutating os.environ."""
+    monkeypatch.delenv("CAPSOLVER_API_KEY", raising=False)
+    env_file = tmp_path / "custom.env"
+    env_file.write_text('CAPSOLVER_API_KEY="CAP-EXPLICIT-FILE-888"\n', encoding="utf-8")
+    monkeypatch.setenv("COGNITIVE_BROWSER_ENV_FILE", str(env_file))
+
+    key = get_capsolver_api_key()
+    assert key == "CAP-EXPLICIT-FILE-888"
+    # Verify os.environ is NOT mutated
+    assert "CAPSOLVER_API_KEY" not in os.environ
+
+
+def test_capsolver_home_and_cwd_env_ignored(monkeypatch, tmp_path):
+    """Verifies that ~/.env, ~/.applypilot/.env, and cwd/.env are strictly ignored."""
+    monkeypatch.delenv("CAPSOLVER_API_KEY", raising=False)
+    monkeypatch.delenv("COGNITIVE_BROWSER_ENV_FILE", raising=False)
+
+    fake_home = tmp_path / "fake_home"
+    fake_home.mkdir()
+    (fake_home / ".env").write_text("CAPSOLVER_API_KEY=CAP-HOME-IGNORED\n", encoding="utf-8")
+    applypilot_dir = fake_home / ".applypilot"
+    applypilot_dir.mkdir()
+    (applypilot_dir / ".env").write_text("CAPSOLVER_API_KEY=CAP-APPLYPILOT-IGNORED\n", encoding="utf-8")
+
+    fake_cwd = tmp_path / "fake_cwd"
+    fake_cwd.mkdir()
+    (fake_cwd / ".env").write_text("CAPSOLVER_API_KEY=CAP-CWD-IGNORED\n", encoding="utf-8")
+
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+    monkeypatch.setattr(Path, "cwd", staticmethod(lambda: fake_cwd))
+
+    key = get_capsolver_api_key()
+    assert key == ""
+    assert "CAPSOLVER_API_KEY" not in os.environ
 
 
 def test_evaluate_captcha_presence_heuristic():
