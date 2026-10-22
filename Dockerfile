@@ -7,6 +7,7 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     DEVICE=cuda \
     PORT=8000 \
+    COGNITIVE_BROWSER_NO_SANDBOX=1 \
     SESSION_DIR=/data/browser_sessions
 
 WORKDIR /app

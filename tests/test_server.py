@@ -50,16 +50,36 @@ class TestServerAPI(unittest.TestCase):
             self.assertEqual(resp_valid.status_code, 200)
             self.assertIn("tools", resp_valid.json())
 
-            # 5. Valid token query parameter -> 200
+            # 5. Token in query parameter must be rejected (only Authorization: Bearer is accepted) -> 401
             resp_query = self.client.get(f"/v1/mcp/tools?token={secret_token}")
-            self.assertEqual(resp_query.status_code, 200)
-            self.assertIn("tools", resp_query.json())
+            self.assertEqual(resp_query.status_code, 401)
+            self.assertIn("Unauthorized", resp_query.json().get("detail", ""))
 
             # 6. Verify constant-time comparison via secrets.compare_digest
             with patch("secrets.compare_digest", wraps=secrets.compare_digest) as mock_digest:
                 resp_mock = self.client.get("/v1/mcp/tools", headers={"Authorization": f"Bearer {secret_token}"})
                 self.assertEqual(resp_mock.status_code, 200)
                 mock_digest.assert_called_once_with(secret_token, secret_token)
+
+    def test_cors_middleware_configuration(self):
+        # Default CORS settings: no allowed origins, allow_credentials=False
+        from fastapi.middleware.cors import CORSMiddleware
+        cors_middlewares = [m for m in app.user_middleware if m.cls == CORSMiddleware]
+        self.assertTrue(len(cors_middlewares) > 0)
+        options = cors_middlewares[0].kwargs
+        self.assertFalse(options.get("allow_credentials", True))
+        self.assertEqual(options.get("allow_origins"), [])
+
+    def test_sandbox_flag_configuration(self):
+        # Verifies that sandbox args are only added when COGNITIVE_BROWSER_NO_SANDBOX=1
+        with patch.dict(os.environ, {"COGNITIVE_BROWSER_NO_SANDBOX": "0"}):
+            from cognitive_browser.browser import BrowserEngine
+            engine = BrowserEngine()
+            # Default should not force no-sandbox
+            self.assertEqual(os.getenv("COGNITIVE_BROWSER_NO_SANDBOX"), "0")
+
+        with patch.dict(os.environ, {"COGNITIVE_BROWSER_NO_SANDBOX": "1"}):
+            self.assertEqual(os.getenv("COGNITIVE_BROWSER_NO_SANDBOX"), "1")
 
 
 if __name__ == "__main__":

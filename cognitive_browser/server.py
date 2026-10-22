@@ -71,8 +71,13 @@ async def lifespan(app: FastAPI):
 
     # Initialize Playwright
     playwright_manager = await async_playwright().start()
+    launch_args = ["--disable-dev-shm-usage"]
+    if os.getenv("COGNITIVE_BROWSER_NO_SANDBOX", "0").strip() in ("1", "true", "yes"):
+        launch_args.extend(["--no-sandbox", "--disable-setuid-sandbox"])
+
     browser_instance = await playwright_manager.chromium.launch(
-        headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+        headless=True,
+        args=launch_args,
     )
     print("✅ [CognitiveBrowser] Ready to accept tasks!\n")
     yield
@@ -92,10 +97,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+cors_env = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
+cors_origins = [o.strip() for o in cors_env.split(",") if o.strip()] if cors_env else []
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -113,8 +121,6 @@ async def verify_api_token_middleware(request: Request, call_next):
         token = None
         if auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
-        elif "token" in request.query_params:
-            token = request.query_params.get("token", "").strip()
 
         if not token or not secrets.compare_digest(token, token_configured):
             return JSONResponse(

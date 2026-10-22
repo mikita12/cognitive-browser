@@ -65,17 +65,20 @@ class BrowserEngine:
                     self._active_page = await self._active_context.new_page()
                 await setup_ssrf_route_guard(self._active_context)
             else:
+                launch_args = [
+                    "--headless=new",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu-rasterization",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--window-size=1366,900",
+                ]
+                if os.getenv("COGNITIVE_BROWSER_NO_SANDBOX", "0").strip() in ("1", "true", "yes"):
+                    launch_args.extend(["--no-sandbox", "--disable-setuid-sandbox"])
+
                 self._browser = await self._playwright.chromium.launch(
                     headless=False,
-                    args=[
-                        "--headless=new",
-                        "--no-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--disable-gpu-rasterization",
-                        "--disable-blink-features=AutomationControlled",
-                        "--disable-infobars",
-                        "--window-size=1366,900",
-                    ],
+                    args=launch_args,
                 )
                 self._active_context = await self._browser.new_context(
                     service_workers="allow",
