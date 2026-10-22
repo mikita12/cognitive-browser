@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from playwright.async_api import Browser, async_playwright
 from pydantic import BaseModel, Field
 
+from . import __version__
 from .browser import BrowserEngine
 from .config import get_device, get_reflex_model
 from .orchestrator import BrowserOrchestrator
@@ -88,7 +89,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Cognitive Browser Decision Microservice",
     description="Ultra-fast local Reflex Core router for Playwright browser automation on GPU",
-    version="1.0.0",
+    version=__version__,
     lifespan=lifespan,
 )
 

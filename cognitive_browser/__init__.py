@@ -1,5 +1,5 @@
 """
-Cognitive Browser (v0.2.0): High-speed, token-efficient browser automation MCP server.
+Cognitive Browser (v0.3.0): High-speed, token-efficient browser automation MCP server.
 Combines local zero-token Cross-Encoder / NLI (Reflex Core) with RouteCache and orchestrating LLM escalation.
 """
 
@@ -32,7 +32,7 @@ def get_decision_router(device=None):
     return ReflexCore(device=device)
 
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     "ReflexCore",
     "BrowserEngine",
