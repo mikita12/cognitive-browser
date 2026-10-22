@@ -55,6 +55,9 @@ preview/
 kod.txt
 *.png
 archiwum/
+results/
+test_ornith_ssh.py
+
 
 
 
