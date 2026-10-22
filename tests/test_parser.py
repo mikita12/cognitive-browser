@@ -166,7 +166,7 @@ class TestAriaElementParser(unittest.TestCase):
         sample_offers_aria = "\n".join(
             [
                 "- main:",
-                '- heading "Wyniki wyszukiwania: Karty graficzne RTX 4070 Ti - Używane" [level=1]',
+                '  - heading "Wyniki wyszukiwania RTX 4070 Ti" [level=1]',
                 '  - link "Gigabyte RTX 4070 Ti Gaming OC":',
                 "    - text: 2 850 zł",
                 '  - link "ASUS TUF RTX 4070 Ti":',

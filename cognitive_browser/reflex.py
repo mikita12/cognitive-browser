@@ -561,8 +561,8 @@ class ReflexCore:
             "aktuelle",
         }
 
-        words = re.findall(r"\b[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻäöüßÄÖÜ]{3,}\b", goal.lower())
-        content_words = [w for w in words if w not in stopwords and not w.isdigit()]
+        tokens = re.findall(r"\b[a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻäöüßÄÖÜ]{3,}\b", goal.lower())
+        content_words = [w for w in tokens if w not in stopwords]
 
         res = list(quotes)
         for w in content_words:
@@ -584,7 +584,7 @@ class ReflexCore:
 
         matched_stems = 0
         for term in specific:
-            if len(term) >= 6 and " " not in term:
+            if len(term) >= 6 and " " not in term and not term.isdigit():
                 stem = term[:-2]
             else:
                 stem = term

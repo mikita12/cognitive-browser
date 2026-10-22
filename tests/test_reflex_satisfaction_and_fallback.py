@@ -31,6 +31,14 @@ def test_extract_specific_goal_phrases():
     assert "öffnen" not in phrases_de
     assert "startseite" not in phrases_de
 
+    # Verify model numbers and alphanumeric tokens are retained as specific phrases
+    goal_hardware = "Znajdź oferty używanych kart RTX 4070 Ti i sprawdź ceny"
+    phrases_hardware = ReflexCore.extract_specific_goal_phrases(goal_hardware)
+    assert "rtx" in phrases_hardware
+    assert "4070" in phrases_hardware
+    assert "sprawdź" not in phrases_hardware
+    assert "ceny" not in phrases_hardware
+
 
 def test_page_satisfaction_rejects_generic_numbers_without_specific_phrases():
     """
