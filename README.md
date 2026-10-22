@@ -201,7 +201,7 @@ cognitive_browse(
 pytest tests/
 ```
 
-All 62 automated unit and integration tests pass with comprehensive coverage across domain models, ARIA parsing, cross-lingual payload binding, CAPTCHA handling, RouteCache self-healing, and SSRF security controls.
+All 87 automated unit and integration tests pass with comprehensive coverage across domain models, ARIA parsing, cross-lingual payload binding, file upload security allowlisting, CAPTCHA handling, RouteCache self-healing, and SSRF security controls.
 
 ---
 
