@@ -218,6 +218,13 @@ Cognitive Browser is configured through environment variables:
 | `API_TOKEN` | String | `None` (unset) | Secret Bearer token for authenticating REST API endpoints. Enforced strictly via `Authorization: Bearer <token>` header (query parameter token authentication is rejected). |
 | `COGNITIVE_BROWSER_MODEL` | HuggingFace model ID or API ID | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | Transformer reranker or NLI model ID used by `ReflexCore`. *(Legacy `MODEL_NAME` is supported as a fallback with `DeprecationWarning`).* |
 | `COGNITIVE_BROWSER_DEVICE` | `cuda`, `mps`, `cpu`, or `api` | Auto-detected | Device for neural inference. Auto-detects `mps` -> `cuda` -> `cpu`. *(Legacy `DEVICE` is supported as a fallback with `DeprecationWarning`).* |
+| `COGNITIVE_BROWSER_CDP_URL` | WebSocket or HTTP URL (e.g. `http://localhost:9222`) | `None` (unset) | CDP endpoint to attach to an existing Chrome browser instance. Requires `COGNITIVE_BROWSER_ALLOW_CDP=1`. |
+| `COGNITIVE_BROWSER_ALLOW_CDP` | Integer / Boolean flag (`1`/`0`) | `0` (disabled) | Explicit opt-in required to allow attaching to an external browser via CDP. Attaching without this flag raises `SecurityError`. |
+| `COGNITIVE_BROWSER_ERROR_SCREENSHOTS_DIR` | Directory path | `None` (disabled) | Explicit directory where error screenshots will be saved. When unset, error screenshot capturing is completely disabled. |
+| `COGNITIVE_BROWSER_ERROR_SCREENSHOTS_FULL_PAGE` | Integer / Boolean flag (`1`/`0`) | `0` (viewport only) | When set to `1`, error screenshots capture full scrollable page height instead of visible viewport. |
+
+> [!WARNING]
+> **CDP Attach Security Notice:** Attaching Cognitive Browser to an existing browser instance via `COGNITIVE_BROWSER_CDP_URL` gives the agent full capability to interact with your active tabs, including authenticated sessions, saved passwords, and private corporate portals. Never enable CDP attach against a browser profile containing sensitive personal or production credentials without isolation.
 
 ---
 

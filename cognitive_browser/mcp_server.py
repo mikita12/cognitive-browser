@@ -214,11 +214,19 @@ def main(argv: Optional[List[str]] = None) -> None:
         default=os.getenv("COGNITIVE_BROWSER_CDP_URL"),
         help="CDP endpoint URL to attach to an existing Chrome browser (e.g. http://localhost:9222).",
     )
+    parser.add_argument(
+        "--allow-cdp",
+        action="store_true",
+        dest="allow_cdp",
+        help="Permit attaching to an external browser session via CDP (required if --cdp-endpoint is used).",
+    )
     args, remaining = parser.parse_known_args(argv)
     if args.enable_cookies:
         set_cookies_enabled(True)
     if args.cdp_endpoint:
         os.environ["COGNITIVE_BROWSER_CDP_URL"] = args.cdp_endpoint
+    if args.allow_cdp:
+        os.environ["COGNITIVE_BROWSER_ALLOW_CDP"] = "1"
     if argv is None:
         sys.argv = [sys.argv[0], *remaining]
     mcp.run()

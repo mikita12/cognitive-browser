@@ -4,6 +4,7 @@ Provides a complete suite of autonomous DOM interaction and page iteration metho
 click, fill (+ auto-submit), select_option, toggle_checkbox, hover, press_key, scroll_page, and auto_dismiss_overlays.
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -17,6 +18,8 @@ from .config import get_upload_allowed_dirs
 from .models import ActionCommand, PageState
 from .parser import AriaElementParser
 from .security import SecurityError, setup_ssrf_route_guard
+
+logger = logging.getLogger(__name__)
 
 STEALTH_USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -54,6 +57,18 @@ class BrowserEngine:
         if self._playwright is None:
             self._playwright = await async_playwright().start()
             if self.cdp_url:
+                allow_cdp = os.getenv("COGNITIVE_BROWSER_ALLOW_CDP", "0").strip().lower() in ("1", "true", "yes")
+                if not allow_cdp:
+                    raise SecurityError(
+                        f"CDP attach rejected: attaching to browser at '{self.cdp_url}' requires explicit permission. "
+                        "Set COGNITIVE_BROWSER_ALLOW_CDP=1 to allow attaching. "
+                        "WARNING: attaching allows the agent to interact directly with real, authenticated browser sessions."
+                    )
+                logger.warning(
+                    "SECURITY WARNING: Attaching to browser via CDP at %s. "
+                    "The agent will execute actions directly within real, authenticated browser sessions.",
+                    self.cdp_url,
+                )
                 self._browser = await self._playwright.chromium.connect_over_cdp(self.cdp_url)
                 contexts = self._browser.contexts
                 if contexts:
@@ -105,22 +120,35 @@ class BrowserEngine:
         return self._active_page
 
     async def capture_screenshot(self, page: Optional[Page] = None, output_path: Optional[str] = None) -> Optional[str]:
-        """Captures a screenshot of the current active page for error telemetry."""
+        """
+        Captures a screenshot of the current active page for error telemetry.
+        Disabled by default unless COGNITIVE_BROWSER_ERROR_SCREENSHOTS_DIR is configured
+        or an explicit output_path is provided.
+        Captures viewport only (full_page=False) unless COGNITIVE_BROWSER_ERROR_SCREENSHOTS_FULL_PAGE=1.
+        """
         try:
             target_page = page or self._active_page
             if target_page is None or target_page.is_closed():
                 return None
             if not output_path:
+                screenshots_dir = os.getenv("COGNITIVE_BROWSER_ERROR_SCREENSHOTS_DIR", "").strip()
+                if not screenshots_dir:
+                    return None
                 from datetime import datetime, timezone
 
                 ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")[:19]
-                err_dir = Path.home() / ".applypilot" / "errors" / "screenshots"
+                err_dir = Path(screenshots_dir)
                 err_dir.mkdir(parents=True, exist_ok=True)
                 output_path = str(err_dir / f"cognitive_error_{ts}.png")
             else:
                 Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-            await target_page.screenshot(path=output_path, full_page=True)
+            full_page = os.getenv("COGNITIVE_BROWSER_ERROR_SCREENSHOTS_FULL_PAGE", "0").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+            )
+            await target_page.screenshot(path=output_path, full_page=full_page)
             return output_path
         except Exception:
             return None
