@@ -39,6 +39,19 @@ def test_extract_specific_goal_phrases():
     assert "sprawdź" not in phrases_hardware
     assert "ceny" not in phrases_hardware
 
+    # Verify pure digit tokens are excluded for non-model goals
+    phrases_job = ReflexCore.extract_specific_goal_phrases("oferty pracy 2026")
+    assert "2026" not in phrases_job
+
+    phrases_top = ReflexCore.extract_specific_goal_phrases("top 100 produktów")
+    assert "100" not in phrases_top
+
+    # Verify mixed alphanumeric identifiers are preserved
+    phrases_mixed = ReflexCore.extract_specific_goal_phrases("kupię 4070ti lub b58 albo 330i")
+    assert "4070ti" in phrases_mixed
+    assert "b58" in phrases_mixed
+    assert "330i" in phrases_mixed
+
 
 def test_page_satisfaction_rejects_generic_numbers_without_specific_phrases():
     """

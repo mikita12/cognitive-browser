@@ -87,6 +87,8 @@ To assess autonomous navigation capabilities under strict real-world constraints
   - **Arm B (Standard Playwright MCP):** Host agent with raw Playwright tools (`browser_navigate`, `browser_click`, `browser_type`) receiving full ARIA snapshots on every step.
   - **Arm C (BM25 Baseline):** Host agent with lexical BM25 ranking ($\tau = 0.02$).
 
+Benchmark Run 6 was measured with the goal-phrase extraction logic that predates commit 5afeb51 (digit-only tokens were ignored).
+
 ### 1. Task Success Rate & Reliability (Arm A: 31.1% vs Arm B: 44.0%)
 
 In this benchmark, Arm A (Cognitive Browser) achieved a lower episode success rate (**31.1%**) than standard Playwright MCP in Arm B (**44.0%**).

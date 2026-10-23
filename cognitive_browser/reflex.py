@@ -561,8 +561,102 @@ class ReflexCore:
             "aktuelle",
         }
 
-        tokens = re.findall(r"\b[a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻäöüßÄÖÜ]{3,}\b", goal.lower())
-        content_words = [w for w in tokens if w not in stopwords]
+        # Identify numeric tokens that directly neighbor a model name / series prefix or suffix (e.g. RTX 4070, 4070 Ti)
+        # Model brands/series commonly followed or preceded by numbers
+        model_prefixes = {
+            "rtx",
+            "gtx",
+            "rx",
+            "radeon",
+            "geforce",
+            "ryzen",
+            "core",
+            "intel",
+            "amd",
+            "nvidia",
+            "iphone",
+            "pixel",
+            "galaxy",
+            "snapdragon",
+            "bmw",
+            "audi",
+            "mercedes",
+            "boeing",
+            "airbus",
+            "playstation",
+            "xbox",
+        }
+        model_suffixes = {
+            "ti",
+            "super",
+            "xt",
+            "xtx",
+            "ultra",
+            "oc",
+        }
+        non_model_words = {
+            "top",
+            "vip",
+            "pdf",
+            "faq",
+            "url",
+            "rok",
+            "roku",
+            "lat",
+            "lata",
+            "dni",
+            "godz",
+            "godzin",
+            "km",
+            "kg",
+            "gb",
+            "mb",
+            "tb",
+            "mhz",
+            "ghz",
+            "zl",
+            "pln",
+            "eur",
+            "usd",
+            "art",
+            "poz",
+            "str",
+            "nr",
+            "pkt",
+            "vol",
+        }
+
+        model_nums: set[str] = set()
+        # Prefix word followed by digits (e.g. RTX 4070, BMW 330)
+        for match in re.finditer(r"\b([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻäöüßÄÖÜ]{2,})[\s\-]+(\d{2,5})\b", goal):
+            prefix, num = match.group(1), match.group(2)
+            if prefix.lower() in model_prefixes or (prefix.isupper() and prefix.lower() not in non_model_words):
+                model_nums.add(num)
+        # Digits followed by suffix word (e.g. 4070 Ti, 7800 XT)
+        for match in re.finditer(r"\b(\d{2,5})[\s\-]+([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻäöüßÄÖÜ]{2,})\b", goal):
+            num, suffix = match.group(1), match.group(2)
+            if (
+                suffix.lower() in model_prefixes
+                or suffix.lower() in model_suffixes
+                or (suffix.isupper() and suffix.lower() not in non_model_words)
+            ):
+                model_nums.add(num)
+
+        tokens = re.findall(r"\b[a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻäöüßÄÖÜ]{2,}\b", goal.lower())
+        content_words: List[str] = []
+        for w in tokens:
+            if w in stopwords:
+                continue
+            # Mixed alphanumeric identifiers (e.g. 4070ti, b58, 330i) are always preserved
+            if any(c.isalpha() for c in w) and any(c.isdigit() for c in w):
+                content_words.append(w)
+            # Pure digit tokens are rejected by default, unless directly neighboring a model identifier
+            elif w.isdigit():
+                if w in model_nums:
+                    content_words.append(w)
+            # Pure alphabetic tokens require length >= 3
+            elif len(w) >= 3:
+                content_words.append(w)
 
         res = list(quotes)
         for w in content_words:
